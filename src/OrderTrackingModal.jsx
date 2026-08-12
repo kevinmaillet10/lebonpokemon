@@ -135,7 +135,12 @@ export default function OrderTrackingModal({
   };
 
   const handleActionClick = () => {
-    if (currentStatut === 5) {
+    if (currentStatut === 1) {
+      // Action pour l'étape 1 ("Voir ma transaction")
+      console.log("Action : Voir la transaction", orderId);
+      // Tu peux par exemple déclencher une redirection, ou fermer la modale, ou ouvrir une vue dédiée :
+      // onClose();
+    } else if (currentStatut === 5) {
       setIsReportOpen(true);
     } else if (currentStatut === 6 && sellerId) {
       setIsRatingOpen(true);
@@ -225,7 +230,7 @@ export default function OrderTrackingModal({
                 <div 
                   onClick={handleActionClick}
                   className={`pt-2 flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 ${
-                    currentStatut === 6 ? 'cursor-pointer' : 'cursor-default'
+                    currentStatut === 1 || currentStatut === 6 ? 'cursor-pointer' : 'cursor-default'
                   }`}
                 >
                   {currentStatut === 6 && <Star className="w-3.5 h-3.5 fill-indigo-600 text-indigo-600" />}

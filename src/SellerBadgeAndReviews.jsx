@@ -15,6 +15,7 @@ export default function SellerBadgeAndReviews({ sellerId, favoriteSellers, toggl
     }
   }, [sellerId]);
 
+  const [selectedReview, setSelectedReview] = useState(null);
   const fetchSellerData = async () => {
     if (!sellerId) return;
     setLoading(true);
@@ -27,8 +28,8 @@ export default function SellerBadgeAndReviews({ sellerId, favoriteSellers, toggl
           .maybeSingle(), // Évite l'erreur 406 si le profil n'existe pas encore
         
         supabase
-          .from('reviews')
-          .select('*, buyer:profiles(username)')
+          .from('ratings')
+          .select('*, buyer:profiles!ratings_buyer_id_fkey(username)')
           .eq('seller_id', sellerId),
       ]);
 
@@ -158,19 +159,25 @@ export default function SellerBadgeAndReviews({ sellerId, favoriteSellers, toggl
       {/* Liste des avis récents */}
       <div className="pt-2">
         <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">
-          Avis de la communauté
+          Avis de la communauté (clique sur un avis pour le lire en entier)
         </h4>
         <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
           {reviews.length > 0 ? (
             reviews.map((rev) => (
-              <div key={rev.id} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+              <div 
+                key={rev.id} 
+                onClick={() => setSelectedReview(rev)}
+                className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all cursor-pointer shadow-xs"
+              >
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-bold text-xs text-slate-700">{rev.buyer?.username || 'Acheteur'}</span>
                   <div className="text-amber-500 text-xs font-bold">
                     {'★'.repeat(rev.rating)}{'☆'.repeat(5 - rev.rating)}
                   </div>
                 </div>
-                <p className="text-xs text-slate-600 font-medium">{rev.comment}</p>
+                <p className="text-xs text-slate-600 font-medium line-clamp-2">
+                  {rev.comment && rev.comment !== 'EMPTY' ? rev.comment : <span className="italic text-slate-400">Aucun commentaire écrit</span>}
+                </p>
               </div>
             ))
           ) : (
@@ -178,6 +185,59 @@ export default function SellerBadgeAndReviews({ sellerId, favoriteSellers, toggl
           )}
         </div>
       </div>
+
+      {/* --- MODALE DE DÉTAIL D'UN AVIS --- */}
+      {selectedReview && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
+            <button 
+              onClick={() => setSelectedReview(null)} 
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-lg font-black text-slate-800">Détails de l'avis</h3>
+
+            <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl">
+              <span className="font-bold text-xs text-slate-700">Acheteur : {selectedReview.buyer?.username || 'Anonyme'}</span>
+              <div className="text-amber-500 font-bold text-sm">
+                {'★'.repeat(selectedReview.rating)}{'☆'.repeat(5 - selectedReview.rating)} ({selectedReview.rating}/5)
+              </div>
+            </div>
+
+            {/* Sous-critères si enregistrés */}
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="bg-slate-50 p-2 rounded-xl">
+                <span className="block text-slate-400 text-[10px]">Communication</span>
+                <span className="font-bold text-slate-700">{selectedReview.communication || '-'}/5</span>
+              </div>
+              <div className="bg-slate-50 p-2 rounded-xl">
+                <span className="block text-slate-400 text-[10px]">Description</span>
+                <span className="font-bold text-slate-700">{selectedReview.description_match || '-'}/5</span>
+              </div>
+              <div className="bg-slate-50 p-2 rounded-xl">
+                <span className="block text-slate-400 text-[10px]">Colis</span>
+                <span className="font-bold text-slate-700">{selectedReview.package_quality || '-'}/5</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Commentaire :</span>
+              <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap">
+                {selectedReview.comment && selectedReview.comment !== 'EMPTY' ? selectedReview.comment : "Aucun commentaire écrit pour cet avis."}
+              </p>
+            </div>
+
+            <button 
+              onClick={() => setSelectedReview(null)}
+              className="w-full bg-slate-900 text-white font-bold py-2.5 rounded-xl text-xs hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -91,7 +91,7 @@ export default function RatingModal({ isOpen, onClose, transactionId, sellerId, 
               placeholder="Parfait rien à dire..." 
               value={comment} 
               onChange={(e) => setComment(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
