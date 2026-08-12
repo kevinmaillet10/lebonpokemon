@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Or texturé / soyeux du trophée -->
+    <linearGradient id="trophy-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4AF37" />
+      <stop offset="50%" stop-color="#AA820A" />
+      <stop offset="100%" stop-color="#7A5C05" />
+    </linearGradient>
+
+    <!-- Ombre portée générale -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <!-- Socle cylindrique texturé -->
+    <path d="M 160 410 L 352 410 L 352 470 L 160 470 Z" fill="#6B5310" stroke="#3A2D05" stroke-width="4"/>
+    <ellipse cx="256" cy="410" rx="96" ry="16" fill="#8B7018" stroke="#3A2D05" stroke-width="4"/>
+
+    <!-- Plaque grise "Kanto League Champion" sur le socle -->
+    <path d="M 192 430 L 320 430 L 320 460 L 192 460 Z" fill="#94A3B8" stroke="#475569" stroke-width="2" rx="3"/>
+    <text x="256" y="443" font-family="Arial, sans-serif" font-weight="900" font-size="10" fill="#1E293B" text-anchor="middle">KANTO</text>
+    <text x="256" y="453" font-family="Arial, sans-serif" font-bold="true" font-size="7" fill="#334155" text-anchor="middle">League Champion</text>
+
+    <!-- Col/Tige du trophée -->
+    <path d="M 224 330 L 288 330 L 304 410 L 208 410 Z" fill="url(#trophy-gold)" stroke="#3A2D05" stroke-width="4" stroke-linejoin="round"/>
+    <ellipse cx="256" cy="330" rx="32" ry="10" fill="#9E7B10" stroke="#3A2D05" stroke-width="3"/>
+
+    <!-- Aile / Plaque décorative gauche -->
+    <g fill="url(#trophy-gold)" stroke="#3A2D05" stroke-width="3" stroke-linejoin="round">
+      <!-- Pointe supérieure gauche -->
+      <path d="M 120 180 C 130 220 160 250 192 280 L 192 230 C 170 210 140 180 120 180 Z" />
+      <!-- Niveaux de plumes stylisées gauche -->
+      <path d="M 192 245 C 160 230 140 210 128 190 L 192 210 Z" />
+      <path d="M 192 275 C 160 260 140 240 128 220 L 192 240 Z" />
+      <path d="M 192 305 C 160 290 140 270 128 250 L 192 270 Z" />
+      <path d="M 192 335 C 160 320 140 300 128 280 L 192 300 Z" />
+    </g>
+
+    <!-- Aile / Plaque décorative droite -->
+    <g fill="url(#trophy-gold)" stroke="#3A2D05" stroke-width="3" stroke-linejoin="round">
+      <!-- Pointe supérieure droite -->
+      <path d="M 392 180 C 382 220 352 250 320 280 L 320 230 C 342 210 372 180 392 180 Z" />
+      <!-- Niveaux de plumes stylisées droite -->
+      <path d="M 320 245 C 352 230 372 210 384 190 L 320 210 Z" />
+      <path d="M 320 275 C 352 260 372 240 384 220 L 320 240 Z" />
+      <path d="M 320 305 C 352 290 372 270 384 250 L 320 270 Z" />
+      <path d="M 320 335 C 352 320 372 300 384 280 L 320 300 Z" />
+    </g>
+
+    <!-- Corps principal de la coupe -->
+    <path d="M 160 140 L 352 140 C 352 260 288 330 256 330 C 224 330 160 260 160 140 Z" fill="url(#trophy-gold)" stroke="#3A2D05" stroke-width="4" stroke-linejoin="round"/>
+    
+    <!-- Rebord supérieur de la coupe -->
+    <ellipse cx="256" cy="140" rx="96" ry="22" fill="#E6C657" stroke="#3A2D05" stroke-width="4"/>
+    <ellipse cx="256" cy="140" rx="84" ry="14" fill="url(#trophy-gold)" stroke="#3A2D05" stroke-width="2"/>
+
+    <!-- Insert triangulaire bleu clair au centre -->
+    <polygon points="256,165 312,280 200,280" fill="#CBD5E1" stroke="#3A2D05" stroke-width="3" stroke-linejoin="round"/>
+    <polygon points="256,172 302,270 210,270" fill="#E2E8F0" />
+    
+    <!-- Support de la Pokéball (petit plot entre la coupe et la balle) -->
+    <path d="M 240 118 L 272 118 L 276 140 L 236 140 Z" fill="#8B7018" stroke="#3A2D05" stroke-width="3"/>
+
+    <!-- Pokéball au sommet -->
+    <g transform="translate(256, 75)">
+      <!-- Ombre de la sphère -->
+      <circle cx="0" cy="0" r="42" fill="#1E293B" opacity="0.15"/>
+      
+      <!-- Moitié supérieure (Rouge) -->
+      <path d="M -40 0 A 40 40 0 0 1 40 0 Z" fill="#FF3B30" stroke="#1E293B" stroke-width="4"/>
+      
+      <!-- Moitié inférieure (Blanche) -->
+      <path d="M -40 0 A 40 40 0 0 0 40 0 Z" fill="#F8FAFC" stroke="#1E293B" stroke-width="4"/>
+      
+      <!-- Ligne noire centrale -->
+      <rect x="-40" y="-3" width="80" height="6" fill="#1E293B"/>
+
+      <!-- Bouton central de la Pokéball -->
+      <circle cx="0" cy="0" r="14" fill="#1E293B" />
+      <circle cx="0" cy="0" r="10" fill="#F8FAFC" stroke="#1E293B" stroke-width="3" />
+    </g>
+  </g>
+</svg>

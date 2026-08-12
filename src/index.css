@@ -1,0 +1,17 @@
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Effet de zoom au survol pour les cartes Pokémon */
+.pokemon-card {
+  transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.3s ease;
+  will-change: transform;
+}
+
+.pokemon-card:hover {
+  transform: scale(1.15); /* Ajuste la valeur si tu veux un zoom plus ou moins fort */
+  z-index: 50;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
