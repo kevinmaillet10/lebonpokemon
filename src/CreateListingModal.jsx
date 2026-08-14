@@ -37,27 +37,22 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
   const getCardImageUrl = (card) => {
     if (!card) return null;
 
-    // 1. Si card.image_url existe (venant de tes annonces ou d'une sélection précédente)
     if (card.image_url) {
       if (Array.isArray(card.image_url)) return card.image_url[0];
       if (typeof card.image_url === 'string' && card.image_url.trim() !== '') return card.image_url;
     }
 
-    // 2. Si card.image est un objet (ex: { low, high } de TCGdex) -> on privilégie high puis low pour la qualité
     if (card.image && typeof card.image === 'object') {
       return card.image.high || card.image.low || null;
     }
 
-    // 3. Si card.image est une chaîne HTTP directe
     if (typeof card.image === 'string' && card.image.startsWith('http')) {
-      // Si l'URL se termine déjà par un format ou slashe, on la renvoie, sinon on ajoute /low.webp comme tu le faisais
       if (card.image.endsWith('.webp') || card.image.endsWith('.jpg') || card.image.endsWith('.png')) {
         return card.image;
       }
       return `${card.image}/low.webp`;
     }
 
-    // 4. Construction dynamique de secours via les IDs TCGdex (avec ton format d'origine)
     const setId = card.set_id || card.set?.id;
     const localId = card.localId || card.id;
     if (setId && localId) {
@@ -107,7 +102,8 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
     try {
       const response = await tcgdex.fetch('series');
       if (response) {
-        const uniqueBlocks = [...new Set(response.map(item => item.block || item.block_name || item.name).filter(Boolean))];
+        const uniqueBlocks = [...new Set(response.map(item => item.block || item.block_name || item.name).filter(Boolean))]
+          .filter(block => !block.toLowerCase().includes('pocket'));
         setBlocks(uniqueBlocks);
       }
     } catch (err) {
@@ -206,12 +202,22 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
   };
 
   const handleImageChange = (e) => {
-    const files = Array.from(e.target.files || []).slice(0, 5);
-    if (files.length > 0) {
-      setImageFiles(files);
-      const previews = files.map(file => URL.createObjectURL(file));
-      setImagePreviews(previews);
-      setSelectedCard(null);
+    const files = Array.from(e.target.files || []);
+    // Calcul de l'espace restant pour atteindre 5 photos max au total (TCGdex compte pour 1 si présent + photos perso)
+    const currentTotal = (selectedCard ? 1 : 0) + imageFiles.length;
+    const remainingSlots = 5 - currentTotal;
+
+    if (remainingSlots <= 0) return;
+
+    const filesToAdd = files.slice(0, remainingSlots);
+    if (filesToAdd.length > 0) {
+      setImageFiles(prev => [...prev, ...filesToAdd]);
+      const previews = filesToAdd.map(file => URL.createObjectURL(file));
+      setImagePreviews(prev => [...prev, ...previews]);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -237,11 +243,16 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
       setErrorMsg('');
 
       let imageUrls = [];
+
+      // 1. Ajouter l'image officielle TCGdex en premier si elle existe
       if (selectedCard) {
         const resolvedUrl = getCardImageUrl(selectedCard);
-        imageUrls = [resolvedUrl];
+        if (resolvedUrl && typeof resolvedUrl === 'string' && resolvedUrl.includes('http')) {
+          imageUrls.push(resolvedUrl);
+        }
       }
 
+      // 2. Ajouter les photos personnelles uploadées depuis l'ordi
       if (imageFiles.length > 0) {
         for (const file of imageFiles) {
           const fileExt = file.name.split('.').pop();
@@ -260,43 +271,45 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
         }
       }
 
+      // 3. On transforme le tableau en une seule chaîne de texte séparée par des virgules
+      // Cela évite l'erreur "malformed array" tout en gardant toutes tes photos !
+      const imagesString = imageUrls.join(',');
+
+      // 4. Construction du Payload
       const listingPayload = {
         user_id: currentUserId,
         seller_id: currentUserId,
         tcgdex_card_id: selectedCard ? selectedCard.id : null,
-        extension_id: selectedCard ? selectedCard.set_id : null,
+        extension_id: selectedCard ? selectedCard.set_id : selectedSeriesId || null,
         title: selectedCard ? `${selectedCard.name} (${finish})` : `${title} (${finish})`,
         price: parseFloat(price),
         quantity: parseInt(quantity, 10) || 1,
         condition: condition,
         finish: finish,
-        image_url: selectedCard ? getCardImageUrl(selectedCard) : (imageUrls.length > 0 ? imageUrls[0] : null),
+        image_url: imagesString, // On envoie toutes les URLs collées avec des virgules
       };
 
+      // 5. Insertion en base
       const { error: insertError } = await supabase
         .from('listings')
         .insert([listingPayload]);
 
-      if (insertError) {
-        console.error("Erreur détaillée listings :", JSON.stringify(insertError, null, 2));
-        throw insertError;
-      }
+      if (insertError) throw insertError;
 
-      // Déclenchement de la fonction parent pour rafraîchir l'affichage sans recharger la page
-      // À la fin de votre fonction handleSubmit (après l'upload et l'insertion en BDD) :
       if (typeof onCreated === 'function') {
-        onCreated(); // Rafraîchit la liste automatiquement
+        onCreated();
       }
-      onClose();     // Ferme la modale
+      onClose();    
+
     } catch (err) {
-      console.error("Erreur création annonce :", err);
-      setErrorMsg("Une erreur est survenue lors de la création de l'annonce.");
+      console.error("Erreur lors de la création de l'annonce :", err);
+      setErrorMsg("Une erreur est survenue lors de la création de l'annonce. Veuillez réessayer.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isOpen) return null;
+  const totalImageCount = (selectedCard ? 1 : 0) + imagePreviews.length;
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -328,73 +341,27 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
             <SecurityBanner />
 
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
-                Visuels de la carte (Jusqu'à 5 photos)
-              </label>
-
-              {selectedCard ? (
-                <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-indigo-200 shadow-xs">
-                  <div className="flex items-center gap-3">
-                    <img 
-                      src={getCardImageUrl(selectedCard)} 
-                      alt={selectedCard.name} 
-                      className="w-12 h-16 object-contain rounded" 
-                      onError={(e) => { 
-                        e.target.onerror = null; 
-                        e.target.src = fallbackSvg; 
-                      }}
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">{selectedCard.name}</p>
-                      <p className="text-[10px] text-indigo-600 font-medium">Carte officielle TCGdex sélectionnée</p>
-                    </div>
-                  </div>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Visuels de la carte ({totalImageCount}/5 photos)
+                </label>
+                {(selectedCard || imagePreviews.length > 0) && (
                   <button
                     type="button"
-                    onClick={() => setSelectedCard(null)}
+                    onClick={() => {
+                      setSelectedCard(null);
+                      setImageFiles([]);
+                      setImagePreviews([]);
+                      if(fileInputRef.current) fileInputRef.current.value='';
+                    }}
                     className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer"
                   >
-                    Changer
+                    Tout réinitialiser
                   </button>
-                </div>
-              ) : imagePreviews.length > 0 ? (
-                <div className="space-y-3 bg-white p-3 rounded-xl border border-emerald-200 shadow-xs">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-900">Photos personnelles ({imagePreviews.length}/5)</p>
-                    <button
-                      type="button"
-                      onClick={() => { setImageFiles([]); setImagePreviews([]); if(fileInputRef.current) fileInputRef.current.value=''; }}
-                      className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer"
-                    >
-                      Tout supprimer
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {imagePreviews.map((preview, idx) => (
-                      <div key={idx} className="relative group aspect-[3/4] bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                        <img src={preview} alt={`Aperçu ${idx + 1}`} className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(idx)}
-                          className="absolute top-1 right-1 bg-slate-900/70 hover:bg-rose-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] transition-colors"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                    {imagePreviews.length < 5 && (
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current.click()}
-                        className="aspect-[3/4] border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors"
-                      >
-                        <span className="text-lg">+</span>
-                        <span className="text-[9px]">Ajouter</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
+                )}
+              </div>
+
+              {!selectedCard && imagePreviews.length === 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -409,7 +376,78 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                     onClick={() => fileInputRef.current.click()}
                     className="py-3 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-2"
                   >
-                    <span>📁</span> Importer depuis mon ordi (Max 5)
+                    <span>📁</span> Importer des photos perso (Max 5)
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 gap-2 pt-2">
+                  {/* Carte TCGdex affichée en premier si sélectionnée */}
+                  {selectedCard && (
+                    <div className="relative group aspect-[3/4] bg-white rounded-lg overflow-hidden border-2 border-indigo-500 flex flex-col items-center justify-center p-1 shadow-xs">
+                      <img 
+                        src={getCardImageUrl(selectedCard)} 
+                        alt={selectedCard.name} 
+                        className="w-full h-full object-contain" 
+                        onError={(e) => { 
+                          e.target.onerror = null; 
+                          e.target.src = fallbackSvg; 
+                        }}
+                      />
+                      <span className="absolute bottom-0 inset-x-0 bg-indigo-600 text-white text-[8px] font-bold text-center py-0.5 truncate px-1">
+                        TCGdex
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCard(null)}
+                        className="absolute top-1 right-1 bg-slate-900/70 hover:bg-rose-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] transition-colors"
+                        title="Retirer la carte TCGdex"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Aperçus des photos personnelles */}
+                  {imagePreviews.map((preview, idx) => (
+                    <div key={idx} className="relative group aspect-[3/4] bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
+                      <img src={preview} alt={`Aperçu ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(idx)}
+                        className="absolute top-1 right-1 bg-slate-900/70 hover:bg-rose-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Bouton d'ajout supplémentaire si moins de 5 photos au total */}
+                  {totalImageCount < 5 && (
+                    <div className="flex flex-col gap-1">
+                      {!selectedCard && imagePreviews.length === 0 ? null : (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current.click()}
+                          className="w-full aspect-[3/4] border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors bg-white cursor-pointer"
+                        >
+                          <span className="text-lg">+</span>
+                          <span className="text-[9px]">Ajouter</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Bouton alternatif pour choisir TCGdex si on a déjà mis des photos perso */}
+              {!selectedCard && imagePreviews.length > 0 && totalImageCount < 5 && (
+                <div className="pt-2 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => setMode('card-select')}
+                    className="text-xs text-indigo-600 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>🔍</span> Associer aussi une carte officielle TCGdex
                   </button>
                 </div>
               )}
@@ -423,6 +461,46 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                 className="hidden" 
               />
             </div>
+
+            {!selectedCard && (
+              <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Bloc</label>
+                  <select
+                    value={selectedBlock}
+                    onChange={(e) => {
+                      setSelectedBlock(e.target.value);
+                      setSelectedSeriesId(''); 
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="">Sélectionner un bloc...</option>
+                    {blocks.map((b) => (
+                      <option key={b.id || b} value={b.id || b}>
+                        {b.name || b}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Série</label>
+                  <select
+                    value={selectedSeriesId}
+                    onChange={(e) => setSelectedSeriesId(e.target.value)}
+                    disabled={!selectedBlock}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">Sélectionner une série...</option>
+                    {seriesList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {!selectedCard && (
               <div>

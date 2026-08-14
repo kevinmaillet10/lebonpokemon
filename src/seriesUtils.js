@@ -1,6 +1,12 @@
 export const groupSeriesByBlock = (seriesList) => {
-  // Optionnel : trier d'abord la liste globale si nécessaire
-  const grouped = seriesList.reduce((acc, series) => {
+  // 1. Filtrer pour exclure les séries Pokémon Pocket (ID commençant par A, B ou P-)
+  const filteredSeries = seriesList.filter(series => {
+    const id = series.id || '';
+    return !id.startsWith('A') && !id.startsWith('B') && !id.startsWith('P-');
+  });
+
+  // 2. Regrouper les séries filtrées par bloc
+  const grouped = filteredSeries.reduce((acc, series) => {
     const blockName = series.block_name || 'Autres';
     if (!acc[blockName]) {
       acc[blockName] = [];
@@ -9,10 +15,9 @@ export const groupSeriesByBlock = (seriesList) => {
     return acc;
   }, {});
 
-  // Optionnel : trier les séries à l'intérieur de chaque bloc (par ex. par date de sortie ou ordre croissant)
+  // 3. Trier les séries à l'intérieur de chaque bloc par date de sortie
   Object.keys(grouped).forEach(blockName => {
     grouped[blockName].sort((a, b) => {
-      // Ajuste selon le champ de tri disponible (ex: release_date, id, etc.)
       return new Date(a.release_date) - new Date(b.release_date);
     });
   });

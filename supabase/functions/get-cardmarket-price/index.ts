@@ -43,27 +43,27 @@ serve(async (req) => {
     let cardRecord = null;
 
     if (cardId) {
-      let res = await supabase.from("pokemon_cards").select("id, name, tcgdex_id").eq("tcgdex_id", cardId).maybeSingle();
+      let res = await supabase.from("cards").select("id, name, id").eq("id", cardId).maybeSingle();
       if (!res.data) {
-        res = await supabase.from("pokemon_cards").select("id, name, tcgdex_id").eq("id", cardId).maybeSingle();
+        res = await supabase.from("cards").select("id, name, id").eq("id", cardId).maybeSingle();
       }
       cardRecord = res.data;
     } 
     
     if (!cardRecord && apiCardId) {
-      const res = await supabase.from("pokemon_cards").select("id, name, tcgdex_id").eq("tcgdex_id", apiCardId).maybeSingle();
+      const res = await supabase.from("cards").select("id, name, id").eq("id", apiCardId).maybeSingle();
       cardRecord = res.data;
     }
 
     if (!cardRecord && name) {
-      const res = await supabase.from("pokemon_cards").select("id, name, tcgdex_id").ilike("name", `%${name}%`).maybeSingle();
+      const res = await supabase.from("cards").select("id, name, id").ilike("name", `%${name}%`).maybeSingle();
       cardRecord = res.data;
     }
 
     const cardName = cardRecord?.name || name || "Carte Inconnue";
     const targetCardUuid = cardRecord?.id || crypto.randomUUID();
     
-    let fetchApiId = cardRecord?.tcgdex_id || apiCardId || cardId;
+    let fetchApiId = cardRecord?.id || apiCardId || cardId;
     if (!fetchApiId && number && series) {
       const cleanSeries = series.toLowerCase().replace(/[^a-z0-9]/g, '');
       fetchApiId = `${cleanSeries}-${number}`;
@@ -92,7 +92,7 @@ serve(async (req) => {
 
     if (cardRecord?.id) {
       await supabase
-        .from("pokemon_cards")
+        .from("cards")
         .update({
           price_trend: priceTrend,
           reverse_price: reversePrice,

@@ -44,12 +44,13 @@ import Footer from './Footer';
 import MfaSetupModal from './MfaSetupModal';
 import TutorialModal from "./TutorialModal";
 import ConditionGuideView from './ConditionGuideView';
+import PokedexView from './PokedexView';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(() => {
     return !localStorage.getItem('hasSeenSplash');
   });
-  const [showTutorial, setShowTutorial] = useState(false); // AJOUTEZ CETTE LIGNE
+  const [showTutorial, setShowTutorial] = useState(false);
   const [currentView, setCurrentView] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBlock, setSelectedBlock] = useState('');
@@ -67,6 +68,7 @@ export default function App() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [showMfaSetupModal, setShowMfaSetupModal] = useState(false);
   const [mfaUser, setMfaUser] = useState(null);
+  const [globalSearch, setGlobalSearch] = useState('');
   
   const [selectedListing, setSelectedListing] = useState(null);
   const [editingListing, setEditingListing] = useState(null);
@@ -980,6 +982,14 @@ return (
               <span>🎯</span> Optimiser mes achats
             </button>
 
+            {/* BOUTON POKÉDEX */}
+            <button 
+              onClick={() => { setCurrentView('pokedex'); setIsUserMenuOpen(false); }}
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-1.5 border border-slate-700"
+            >
+              <span className="text-purple-400">📖</span> Pokédex
+            </button>
+
             {/* BOUTON MA COLLECTION */}
             <button 
               onClick={() => setCurrentView('my-collection')}
@@ -1773,6 +1783,7 @@ return (
             {/* 1. Vue Accueil (Home) */}
             {currentView === 'home' && (
               <Home 
+                user={user}
                 setCurrentView={setCurrentView}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
@@ -1827,6 +1838,17 @@ return (
             {currentView === 'optimizer' && (
               <MissingCardsOptimizer 
                 user={user} 
+              />
+            )}
+
+            {currentView === 'pokedex' && (
+              <PokedexView 
+                user={user} 
+                setCurrentView={setCurrentView}
+                onNavigateToShop={(pokemonName) => {
+                  setSearchQuery(pokemonName); // Met à jour le terme de recherche
+                  setCurrentView('home');      // Redirige vers la boutique
+                }}
               />
             )}
 

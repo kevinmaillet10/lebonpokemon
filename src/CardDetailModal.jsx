@@ -7,6 +7,8 @@ import ReportModal from './ReportModal';
 
 export default function CardDetailModal({ listing, onClose, onOpenInboxWithConversation, onAddToCart, currentUserId, favoriteSellers, toggleFavoriteSeller }) { 
   if (!listing || !listing.id) return null;
+  console.log("DONNÉES DE L'ANNONCE (LISTING) :", listing); //
+  console.log("🔍 DEBUG CARTE & ANNONCE :");
   
   const [showStoreModal, setShowStoreModal] = useState(false);
   const [isStartingChat, setIsStartingChat] = useState(false);
@@ -24,6 +26,8 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
   const [selectedPeriod, setSelectedPeriod] = useState('15J');
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+
+  console.log("DONNÉES DE L'ANNONCE REÇUES :", listing);
 
   const specificCardId = listing?.card_id || listing?.cards?.id || listing?.id;
   const cardName = listing?.cards?.name || listing?.title || 'Carte sans nom';
@@ -48,7 +52,6 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
 
         if (error) throw error;
 
-        // Extraction sécurisée des données Cardmarket depuis l'API TCDGx
         const raw = data?.data || data?.result || data || {};
         const cmPricing = raw.pricing?.cardmarket || raw.cards?.pricing?.cardmarket || raw.standard || raw;
 
@@ -58,7 +61,6 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
         const d30Price = cmPricing.avg30 ?? cmPricing.d30 ?? cmPricing.j30 ?? null;
         const variationVal = cmPricing.variation ?? cmPricing.variation_percentage ?? 0;
 
-        // Holo / Reverse avec gestion des clés spécifiques TCDGx ('avg-holo', etc.)
         const revAvg = cmPricing['avg-holo'] ?? cmPricing.moy_vente_holo ?? null;
         const revD1 = cmPricing['avg1-holo'] ?? null;
         const revD7 = cmPricing['avg7-holo'] ?? null;
@@ -85,7 +87,6 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
             }
           });
 
-          // Gestion de l'historique pour le graphique
           if (data?.history && Array.isArray(data.history) && data.history.length > 0) {
             setRawHistory(data.history);
           } else {
@@ -115,7 +116,6 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
 
   const getFilteredHistory = () => {
     if (!rawHistory || rawHistory.length === 0) {
-      // Génération dynamique de secours si l'historique est vide
       const now = new Date();
       const daysCount = selectedPeriod === '1J' ? 1 : selectedPeriod === '7J' ? 7 : selectedPeriod === '15J' ? 15 : 30;
       const baseAvg = marketData.standard.avg || 1;
@@ -155,40 +155,58 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
     return `https://www.ebay.fr/sch/i.html?_nkw=${query}&_sacat=0&LH_Sold=1&LH_Complete=1`;
   };
 
+  // 1. Déclaration des hooks
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
   let imagesList = [];
+
+  // Si image_url existe, on sépare les différentes URL par une virgule
   if (listing?.image_url) {
     if (typeof listing.image_url === 'string') {
-      try {
-        const parsed = JSON.parse(listing.image_url);
-        imagesList = Array.isArray(parsed) ? parsed : [parsed];
-      } catch (e) {
-        imagesList = [listing.image_url];
-      }
+      imagesList = listing.image_url
+        .split(',')
+        .map(url => url.trim().replace(/^["\[]+|["\]]+$/g, '')) // Nettoyage des guillemets ou crochets éventuels
+        .filter(url => url.startsWith('http'));
     } else if (Array.isArray(listing.image_url)) {
-      imagesList = listing.image_url;
+      imagesList = listing.image_url.filter(url => typeof url === 'string' && url.startsWith('http'));
     }
-  } else if (listing?.cards?.image_url) {
-    imagesList = Array.isArray(listing.cards.image_url) ? listing.cards.image_url : [listing.cards.image_url];
-  } else if (listing?.card_image) {
-    imagesList = [listing.card_image];
   }
 
+  // Si rien dans image_url, on regarde dans image_url_backup
+  if (imagesList.length === 0 && listing?.image_url_backup) {
+    if (typeof listing.image_url_backup === 'string') {
+      try {
+        const parsed = JSON.parse(listing.image_url_backup);
+        if (Array.isArray(parsed)) {
+          imagesList = parsed.filter(url => typeof url === 'string' && url.startsWith('http'));
+        }
+      } catch (e) {
+        imagesList = listing.image_url_backup
+          .split(',')
+          .map(url => url.trim().replace(/^["\[]+|["\]]+$/g, ''))
+          .filter(url => url.startsWith('http'));
+      }
+    }
+  }
+
+  // Image de secours si la liste est vide
   if (imagesList.length === 0) {
     imagesList = ['https://via.placeholder.com/500x700?text=Pas+d%27image'];
   }
 
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
   const nextImage = (e) => {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     setCurrentImageIndex((prev) => (prev + 1) % imagesList.length);
   };
 
   const prevImage = (e) => {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     setCurrentImageIndex((prev) => (prev - 1 + imagesList.length) % imagesList.length);
   };
+
+  if (!listing) return null;
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const handleContactClick = async () => {
     if (!currentUserId) {
@@ -267,7 +285,7 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
   const priceRange = maxPrice - minPrice || 1;
 
   const daysMap = { '1J': 1, '7J': 7, '15J': 15, '30J': 30 };
-  const daysCount = daysMap[selectedPeriod] || 30;  
+  const daysCount = daysMap[selectedPeriod] || 30;   
   const chartEndDate = new Date();
   const chartStartDate = new Date();
   chartStartDate.setDate(chartEndDate.getDate() - daysCount);
@@ -337,44 +355,45 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
           onClick={(e) => e.stopPropagation()}
         >
           {/* Image */}
-          <div className="md:w-7/12 bg-slate-950 p-8 flex items-center justify-center relative min-h-[450px] md:min-h-[600px]">
+          <div className="md:w-7/12 bg-slate-950 p-8 flex flex-col items-center justify-between relative min-h-[450px] md:min-h-[600px]">
             <button 
               onClick={onClose}
-              className="absolute top-4 left-4 md:hidden bg-slate-800 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer z-10"
+              className="absolute top-4 left-4 md:hidden bg-slate-800 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer z-20"
             >
               ✕
             </button>
 
-            {/* Conteneur de l'image (sans le badge) */}
-            <div className="relative flex items-center justify-center">
+            {/* Espace image centré */}
+            <div className="flex-1 flex items-center justify-center w-full my-auto">
               <img 
                 src={imagesList[currentImageIndex]} 
                 alt={cardName} 
                 onClick={() => setIsFullscreen(true)}
-                className="max-h-[85vh] w-auto object-contain rounded-xl shadow-2xl transition-all duration-300 cursor-zoom-in hover:scale-[1.02]"
+                className="max-h-[75vh] w-auto object-contain rounded-xl shadow-2xl transition-all duration-300 cursor-zoom-in hover:scale-[1.02]"
                 title="Cliquer pour afficher en plein écran"
               />
             </div>
 
-            {imagesList.length > 1 && (
-              <>
-                <button 
-                  onClick={prevImage}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl cursor-pointer transition-colors shadow-lg"
-                >
-                  &larr;
-                </button>
-                <button 
-                  onClick={nextImage}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl cursor-pointer transition-colors shadow-lg"
-                >
-                  &rarr;
-                </button>
-                <div className="absolute bottom-4 bg-black/70 px-4 py-1.5 rounded-full text-white text-xs font-bold tracking-wider shadow-md">
-                  {currentImageIndex + 1} / {imagesList.length} (Cliquer pour zoomer)
-                </div>
-              </>
-            )}
+            {/* Barre de navigation forcée pour test */}
+            <div className="w-full flex items-center justify-center gap-6 mt-4 z-10">
+              <button 
+                onClick={prevImage}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-sm cursor-pointer transition-colors shadow-md flex items-center gap-1"
+              >
+                &larr; Précédent
+              </button>
+              
+              <span className="text-slate-300 text-xs font-bold tracking-wider bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800">
+                {currentImageIndex + 1} / {imagesList.length}
+              </span>
+
+              <button 
+                onClick={nextImage}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold text-sm cursor-pointer transition-colors shadow-md flex items-center gap-1"
+              >
+                Suivant &rarr;
+              </button>
+            </div>
           </div>
 
           {/* Détails */}

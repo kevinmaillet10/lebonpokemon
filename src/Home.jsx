@@ -4,8 +4,7 @@ import { ChevronLeft, ChevronRight, Zap, ShoppingBag, BookOpen } from 'lucide-re
 
 export default function Home({
   setCurrentView,
-  searchQuery,
-  setSearchQuery,
+  initialSearch,
   selectedBlock,
   setSelectedBlock,
   selectedSeriesFilter,
@@ -27,6 +26,7 @@ export default function Home({
   onOpenCreateSingleListing,
   currentUserId
 }) {
+  const [searchQuery, setSearchQuery] = useState(initialSearch || '');
   const [isSeriesDropdownOpen, setIsSeriesDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -110,15 +110,27 @@ export default function Home({
   });
 
   // --- Générer les suggestions dynamiques pour la recherche textuelle ---
-  const searchSuggestions = searchQuery.trim().length > 0 ? [...new Set(
+  const searchSuggestions = (searchQuery || '').trim().length > 0 ? [...new Set(
     listings
       .map(item => item.cards?.name || item.title || '')
-      .filter(name => name.toLowerCase().includes(searchQuery.toLowerCase()))
+      .filter(name => name.toLowerCase().includes((searchQuery || '').toLowerCase()))
   )].slice(0, 6) : [];
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 bg-[#16181d] text-white min-h-screen">
       
+      {/* Bouton Pokédex intégré (Exemple de positionnement ou à placer dans ta barre de navigation globale/Header) */}
+      <div className="flex justify-end items-center gap-3">
+        <button 
+          type="button"
+          onClick={() => setCurrentView('pokedex')}
+          className="flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white cursor-pointer bg-[#1e222b] hover:bg-slate-800 border border-slate-700/60 px-4 py-2.5 rounded-xl transition-all shadow-sm"
+        >
+          <BookOpen size={16} className="text-purple-400" />
+          Pokédex
+        </button>
+      </div>
+
       {/* 1. Hero Banner principal en mode Carrousel */}
       <div className="relative w-full">
         
@@ -499,16 +511,17 @@ export default function Home({
             <p className="text-xs text-slate-400">Parcourez les dernières annonces mises en ligne sur la plateforme</p>
           </div>
           <span className="text-xs font-bold bg-slate-800 text-emerald-400 border border-slate-700 px-3 py-1 rounded-full">
-            {filteredListings.length} {filteredListings.length > 1 ? 'annonces' : 'annonce'}
+            {(filteredListings || []).length} {(filteredListings || []).length > 1 ? 'annonces' : 'annonce'}
           </span>
+
         </div>
 
-        {filteredListings.length === 0 ? (
+        {(filteredListings || []).length === 0 ? (
           <div className="text-center py-16 bg-[#16181d] rounded-2xl border border-dashed border-slate-800 p-6 space-y-3">
             <p className="text-slate-400 font-medium text-sm">Aucune annonce active ne correspond à vos critères.</p>
             <button
               onClick={() => { 
-                setSearchQuery(''); 
+                setSearchQuery('');
                 setSelectedBlock('');
                 setSelectedSeriesFilter('');
                 setSelectedRegion('');
@@ -521,7 +534,7 @@ export default function Home({
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filteredListings.slice(0, 90).map((item) => (
+            {(filteredListings || []).slice(0, 90).map((item) => (
               <SingleListing 
                 key={item?.id} 
                 listing={item} 

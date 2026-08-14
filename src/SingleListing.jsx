@@ -76,8 +76,15 @@ export default function SingleListing({
           </div>
 
           {listing.condition && (
-            <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+            <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider z-10">
               {listing.condition}
+            </span>
+          )}
+
+          {/* Badge du nombre de photos réelles ajoutées (s'il y en a plus d'une) */}
+          {Array.isArray(imagesList) && imagesList.length > 1 && (
+            <span className="absolute top-2.5 right-14 bg-black/70 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-md z-10">
+              📸 {imagesList.length - 1}
             </span>
           )}
         </div>

@@ -289,7 +289,8 @@ export default function App() {
         .select(`
           *,
           profiles:user_id (username, department_code, avatar_url),
-          cards (name, image_url)
+          cards (*),
+          listing_images (*)
         `)
         .order('created_at', { ascending: false });
 

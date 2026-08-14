@@ -18,6 +18,12 @@ async function updateAllSeriesLogos() {
   }
 
   for (const row of seriesList) {
+    // 🚫 Ignore les séries Pokémon Pocket (commençant par A, B ou P-)
+    if (row.id.startsWith('A') || row.id.startsWith('B') || row.id.startsWith('P-')) {
+      console.log(`⏩ Ignoré (Pokémon Pocket) : ${row.name} (${row.id})`);
+      continue;
+    }
+
     const set = await tcgdex.set.get(row.id);
     
     if (set && set.logo) {

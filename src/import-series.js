@@ -35,6 +35,12 @@ async function importSeriesAndCards() {
   console.log(`📊 ${importedSetIds.size} séries trouvées en base comme déjà importées.\n`);
 
   for (const setBrief of sets) {
+    // 🚫 Ignore les séries Pokémon Pocket (commençant par A, B ou P-)
+    if (setBrief.id.startsWith('A') || setBrief.id.startsWith('B') || setBrief.id.startsWith('P-')) {
+      console.log(`⏩ Ignoré (Pokémon Pocket) : ${setBrief.name} (${setBrief.id})`);
+      continue;
+    }
+
     // Si la série est déjà connue en base, on la saute immédiatement sans appeler l'API TCGdex
     if (importedSetIds.has(setBrief.id)) {
       console.log(`⏩ Série déjà importée : ${setBrief.name} (${setBrief.id}) - Ignorée.`);

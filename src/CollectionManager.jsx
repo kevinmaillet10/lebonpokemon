@@ -8,21 +8,10 @@ export default function CollectionManager({ user, onBack }) {
   const [selectedSeries, setSelectedSeries] = useState(null);
   const [cards, setCards] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showOnlyMissing, setShowOnlyMissing] = useState(false);
   const [userCollection, setUserCollection] = useState({});
   const [seriesStats, setSeriesStats] = useState({});
   const [loading, setLoading] = useState(true);
-
-  // Liste des raretés qui doivent être doublées (Normal + Reverse dans la grille)
-  const dualVariantRarities = [
-    'common', 'commune', 
-    'uncommon', 'peu commune', 
-    'rare', 'rare holo', 'holo rare'
-  ];
-
-  const hasReverseVariant = (rarity) => {
-    if (!rarity) return false;
-    return dualVariantRarities.includes(rarity.toLowerCase().trim());
-  };
 
   // 1. Charger les séries et calculer les stats proprement
   useEffect(() => {
@@ -54,7 +43,7 @@ export default function CollectionManager({ user, onBack }) {
         for (const serie of seriesData) {
           const { data: serieCards } = await supabase
             .from('cards')
-            .select('id, rarity')
+            .select('id, variants')
             .eq('set_id', serie.id);
 
           const totalCardsInSet = serieCards ? serieCards.length : 0;
@@ -62,9 +51,9 @@ export default function CollectionManager({ user, onBack }) {
           let ownedCount = 0;
           if (serieCards) {
             serieCards.forEach(card => {
-              const isNormalOwned = userCollMap[`${card.id}_normal`];
-              const isReverseOwned = userCollMap[`${card.id}_reverse`];
-              if (isNormalOwned || isReverseOwned) {
+              const cardVariants = getCardVariantsList(card.variants);
+              const hasOneOwned = cardVariants.some(v => userCollMap[`${card.id}_${v}`]);
+              if (hasOneOwned) {
                 ownedCount++;
               }
             });
@@ -84,6 +73,20 @@ export default function CollectionManager({ user, onBack }) {
     }
     fetchData();
   }, [user]);
+
+  const getCardVariantsList = (variantsData) => {
+    if (!variantsData) return ['normal', 'reverse'];
+    
+    if (typeof variantsData === 'object' && !Array.isArray(variantsData)) {
+      return Object.keys(variantsData).filter(key => variantsData[key] === true);
+    }
+    
+    if (Array.isArray(variantsData)) {
+      return variantsData;
+    }
+    
+    return ['normal'];
+  };
 
   // 2. Charger les cartes de la série sélectionnée
   useEffect(() => {
@@ -110,13 +113,12 @@ export default function CollectionManager({ user, onBack }) {
     }
   }, [step, selectedSeries]);
 
- async function toggleCardOwnership(cardId, variant) {
+  async function toggleCardOwnership(cardId, variant) {
     if (!user) return;
 
     const existingKey = `${cardId}_${variant}`;
     const isCurrentlyOwned = !!userCollection[existingKey];
 
-    // 1. Mise à jour immédiate de l'interface (état local)
     setUserCollection(prev => {
       const copy = { ...prev };
       if (isCurrentlyOwned) {
@@ -127,7 +129,6 @@ export default function CollectionManager({ user, onBack }) {
       return copy;
     });
 
-    // 2. Recalcul des stats de la série
     if (selectedSeries) {
       const serieCards = cards;
       const updatedCollMap = { ...userCollection };
@@ -139,7 +140,9 @@ export default function CollectionManager({ user, onBack }) {
 
       let ownedCount = 0;
       serieCards.forEach(c => {
-        if (updatedCollMap[`${c.id}_normal`] || updatedCollMap[`${c.id}_reverse`]) {
+        const cVariants = getCardVariantsList(c.variants);
+        const hasOneOwned = cVariants.some(v => updatedCollMap[`${c.id}_${v}`]);
+        if (hasOneOwned) {
           ownedCount++;
         }
       });
@@ -155,9 +158,7 @@ export default function CollectionManager({ user, onBack }) {
       }));
     }
 
-    // 3. Synchronisation robuste avec Supabase en incluant le 'variant'
     if (isCurrentlyOwned) {
-      // Suppression spécifique de la variante exacte (normal ou reverse)
       const { error } = await supabase
         .from('user_collection')
         .delete()
@@ -167,11 +168,8 @@ export default function CollectionManager({ user, onBack }) {
           variant: variant 
         });
 
-      if (error) {
-        console.error("Erreur lors de la suppression dans Supabase :", error);
-      }
+      if (error) console.error("Erreur suppression Supabase :", error);
     } else {
-      // Insertion ou mise à jour sécurisée avec upsert
       const { error } = await supabase
         .from('user_collection')
         .upsert([{ 
@@ -181,24 +179,49 @@ export default function CollectionManager({ user, onBack }) {
           is_owned: true 
         }], { onConflict: 'user_id, card_id, variant' });
 
-      if (error) {
-        console.error("Erreur lors de l'insertion dans Supabase :", error);
-      }
+      if (error) console.error("Erreur insertion Supabase :", error);
     }
   }
 
   const renderableCards = [];
   cards.forEach(card => {
-    renderableCards.push({ ...card, displayVariant: 'normal' });
-    if (hasReverseVariant(card.rarity)) {
-      renderableCards.push({ ...card, displayVariant: 'reverse' });
-    }
+    const cardVariants = getCardVariantsList(card.variants);
+    cardVariants.forEach(variant => {
+      renderableCards.push({ ...card, displayVariant: variant });
+    });
   });
 
-  const filteredCards = renderableCards.filter(item => 
-    item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.number?.toString().includes(searchQuery)
-  );
+  const filteredCards = renderableCards.filter(item => {
+    const matchesSearch = 
+      item.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.number?.toString().includes(searchQuery);
+
+    if (!matchesSearch) return false;
+
+    if (showOnlyMissing) {
+      const isOwned = !!userCollection[`${item.id}_${item.displayVariant}`];
+      if (isOwned) return false;
+    }
+
+    return true;
+  });
+
+  const getVariantBadgeStyle = (variant) => {
+    switch (variant.toLowerCase()) {
+      case 'reverse':
+        return { label: 'Reverse', bg: 'bg-amber-500 text-slate-950' };
+      case 'holo':
+      case 'holofoil':
+        return { label: 'Holo', bg: 'bg-purple-600 text-white' };
+      case 'cosmos':
+      case 'holocosmos':
+        return { label: 'Holo Cosmos', bg: 'bg-blue-600 text-white' };
+      case 'nonholo':
+      case 'normal':
+      default:
+        return { label: 'Standard', bg: 'bg-red-600 text-white' };
+    }
+  };
 
   // Vue Liste des Séries
   if (step === 'series') {
@@ -303,20 +326,32 @@ export default function CollectionManager({ user, onBack }) {
             <ArrowLeft size={14} /> Retour aux séries
           </button>
           <span className="text-sm font-extrabold text-purple-400">
-            {selectedSeries?.name} ({renderableCards.length} déclinaisons affichées)
+            {selectedSeries?.name} ({filteredCards.length} déclinaisons affichées)
           </span>
-
         </div>
 
-        <div className="relative w-full md:w-80">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Nom de la carte ou numéro..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl pl-9 pr-4 py-2 focus:outline-none focus:border-purple-500"
-          />
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          {/* Case à cocher Cartes manquantes */}
+          <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none bg-[#16181d] px-3.5 py-2 rounded-xl border border-slate-700 hover:border-purple-500/50 transition-colors shrink-0">
+            <input 
+              type="checkbox" 
+              checked={showOnlyMissing} 
+              onChange={(e) => setShowOnlyMissing(e.target.checked)}
+              className="rounded border-slate-700 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+            />
+            <span className="font-medium">Cartes manquantes</span>
+          </label>
+
+          <div className="relative w-full md:w-80">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Nom de la carte ou numéro..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl pl-9 pr-4 py-2 focus:outline-none focus:border-purple-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -330,7 +365,7 @@ export default function CollectionManager({ user, onBack }) {
             {filteredCards.map((card, index) => {
               const variant = card.displayVariant;
               const isOwned = !!userCollection[`${card.id}_${variant}`];
-              const isReverse = variant === 'reverse';
+              const badgeInfo = getVariantBadgeStyle(variant);
 
               return (
                 <div 
@@ -343,15 +378,9 @@ export default function CollectionManager({ user, onBack }) {
                   }`}
                 >
                   <div className="absolute top-3 left-3 z-10 pointer-events-none">
-                    {isReverse ? (
-                      <span className="bg-amber-500 text-slate-950 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-md">
-                        Reverse
-                      </span>
-                    ) : (
-                      <span className="bg-red-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-md">
-                        Standard
-                      </span>
-                    )}
+                    <span className={`${badgeInfo.bg} text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-md`}>
+                      {badgeInfo.label}
+                    </span>
                   </div>
 
                   {isOwned && (

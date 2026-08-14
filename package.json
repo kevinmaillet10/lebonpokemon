@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "^2.110.9",
     "@tcgdex/sdk": "^2.9.0",
     "canvas-confetti": "^1.9.4",
+    "dotenv": "^17.4.2",
     "lucide-react": "^1.27.0",
     "node-fetch": "^3.3.2",
     "react": "^19.2.8",

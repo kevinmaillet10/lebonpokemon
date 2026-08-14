@@ -33,31 +33,31 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
           return;
         }
 
-        // 1. Charger toutes les cartes de référence depuis pokemon_cards (contient release_date et set_name)
+        // 1. Charger toutes les cartes de référence par lots
         let allCardsMap = {};
         let step = 1000;
         let start = 0;
-        let fetchMore = true;
+        let fetchMoreCards = true;
 
-        while (fetchMore) {
+        while (fetchMoreCards) {
           const { data: batch, error: cardsError } = await supabase
-            .from('pokemon_cards')
+            .from('cards')
             .select('*')
-            .order('tcgdex_id', { ascending: true })
+            .order('id', { ascending: true })
             .range(start, start + step - 1);
 
           if (cardsError) throw cardsError;
 
           if (batch && batch.length > 0) {
             batch.forEach(card => {
-              if (card?.tcgdex_id) {
-                allCardsMap[card.tcgdex_id] = card;
+              if (card?.id) {
+                allCardsMap[card.id] = card;
               }
             });
             start += step;
-            if (batch.length < step) fetchMore = false;
+            if (batch.length < step) fetchMoreCards = false;
           } else {
-            fetchMore = false;
+            fetchMoreCards = false;
           }
         }
 
@@ -86,12 +86,27 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
           }
         });
 
-        // 4. Interroger les annonces
-        const { data: listings, error: listingsError } = await supabase
-          .from('listings')
-          .select('*');
+        // 4. Récupérer les annonces par lots (sécurité pour gros volumes)
+        let listings = [];
+        let listingStart = 0;
+        let fetchMoreListings = true;
 
-        if (listingsError) throw listingsError;
+        while (fetchMoreListings) {
+          const { data: batchListings, error: listingsError } = await supabase
+            .from('listings')
+            .select('*')
+            .range(listingStart, listingStart + step - 1);
+
+          if (listingsError) throw listingsError;
+
+          if (batchListings && batchListings.length > 0) {
+            listings = listings.concat(batchListings);
+            listingStart += step;
+            if (batchListings.length < step) fetchMoreListings = false;
+          } else {
+            fetchMoreListings = false;
+          }
+        }
 
         if (!listings || listings.length === 0 || missingCardIds.size === 0) {
           setRankedSellers([]);
@@ -116,7 +131,7 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
           }
         }
 
-        // 6. Grouper par vendeur et récupérer les infos directement depuis pokemon_cards
+        // 6. Grouper par vendeur et enrichir les données
         const sellerMap = {};
         const initialSelections = {};
 
@@ -140,20 +155,33 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
 
           const uniqueKey = listing.id || `${sellerId}-${cardRef}-${index}`;
 
-          let resolvedImageUrl = null;
-          try {
-            const rawImg = listing.image_url || listing.card_image_url;
-            if (rawImg) {
-              const parsed = typeof rawImg === 'string' ? JSON.parse(rawImg) : rawImg;
-              resolvedImageUrl = Array.isArray(parsed) ? parsed[0] : parsed;
-            }
-          } catch (e) {
-            resolvedImageUrl = listing.image_url || listing.card_image_url;
-          }
-
           const cardInfo = allCardsMap[cardRef] || {};
           const releaseDate = cardInfo.release_date || null;
           const setNames = cardInfo.set_name || '';
+
+          let resolvedImageUrl = null;
+          const rawImg = listing.image_url || listing.card_image_url || cardInfo.image || cardInfo.image_url;
+          
+          if (rawImg) {
+            if (typeof rawImg === 'string') {
+              if (rawImg.startsWith('[') || rawImg.startsWith('{') || rawImg.startsWith('"')) {
+                try {
+                  const parsed = JSON.parse(rawImg);
+                  resolvedImageUrl = Array.isArray(parsed) 
+                    ? parsed[0] 
+                    : (typeof parsed === 'object' && parsed !== null ? (parsed.high || parsed.large || parsed.small || Object.values(parsed)[0]) : parsed);
+                } catch (e) {
+                  resolvedImageUrl = rawImg;
+                }
+              } else {
+                resolvedImageUrl = rawImg;
+              }
+            } else if (Array.isArray(rawImg)) {
+              resolvedImageUrl = rawImg[0];
+            } else if (typeof rawImg === 'object' && rawImg !== null) {
+              resolvedImageUrl = rawImg.high || rawImg.large || rawImg.small || Object.values(rawImg)[0];
+            }
+          }
 
           const enrichedCard = {
             ...listing,
@@ -170,14 +198,14 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
           initialSelections[sellerId][uniqueKey] = true;
         });
 
-        // 7. Tri strict : Date de sortie décroissante (du plus récent au plus ancien), puis par ID TCGdex
+        // 7. Tri strict : Date de sortie décroissante, puis par ID TCGdex
         Object.values(sellerMap).forEach(vendor => {
           vendor.cards.sort((a, b) => {
             const dateA = a.release_date ? new Date(a.release_date).getTime() : 0;
             const dateB = b.release_date ? new Date(b.release_date).getTime() : 0;
 
             if (dateB !== dateA) {
-              return dateB - dateA; // Du plus récent au plus ancien
+              return dateB - dateA;
             }
 
             const idA = a.tcgdex_card_id || '';
@@ -225,6 +253,47 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
     }));
   };
 
+  const handleAddToCart = (vendor, checkedCards, totalCardPrice, shippingFee) => {
+    const safeCards = Array.isArray(checkedCards) ? checkedCards.filter(Boolean) : [];
+    
+    const vendorPayload = { 
+      id: vendor?.id || 'unknown_vendor',
+      name: vendor?.name || 'Vendeur',
+      rating: vendor?.rating || '500',
+      items: safeCards,
+      cards: safeCards,
+      totalCardPrice: Number(totalCardPrice || 0), 
+      shippingFee: Number(shippingFee || 2.50)
+    };
+
+    const cartKey = 'pokemarket_cart';
+    let currentCart = {};
+    try {
+      const saved = localStorage.getItem(cartKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          currentCart = parsed;
+        }
+      }
+    } catch (err) {
+      console.error("Erreur lecture localStorage", err);
+    }
+
+    if (!Array.isArray(currentCart)) {
+      currentCart[vendorPayload.id] = vendorPayload;
+    } else {
+      currentCart = [vendorPayload];
+    }
+
+    localStorage.setItem(cartKey, JSON.stringify(currentCart));
+    localStorage.setItem('active_tab', 'cart');
+
+    if (onAddToCart) {
+      onAddToCart(vendorPayload);
+    }
+  };
+
   if (loading) {
     return <div className="p-6 text-center text-slate-300">Analyse de votre collection et recherche des meilleurs vendeurs...</div>;
   }
@@ -253,7 +322,6 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {rankedSellers.map((vendor) => {
           const vendorSelections = selectedCardsMap[vendor.id] || {};
-          
           const checkedCards = vendor.cards.filter(card => vendorSelections[card.uniqueKey]);
           
           const totalCardPrice = checkedCards.reduce((sum, card) => {
@@ -263,7 +331,6 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
 
           const shippingFee = checkedCards.length > 0 ? 2.50 : 0;
           const grandTotal = totalCardPrice + shippingFee;
-
           const allSelected = vendor.cards.length > 0 && vendor.cards.every(card => vendorSelections[card.uniqueKey]);
           
           const maxVisibleCards = 20;
@@ -272,13 +339,11 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
 
           return (
             <div key={vendor.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
-              
               <div className="flex justify-between items-start mb-4 border-b border-slate-800 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-amber-400 font-bold text-sm">★ {vendor.rating}</span>
                     <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300">🇫🇷</span>
-                    
                     <button 
                       onClick={() => setSelectedSellerIdForStore(vendor.id)}
                       className="font-extrabold text-indigo-400 text-base hover:underline text-left cursor-pointer bg-transparent border-none p-0"
@@ -295,52 +360,7 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    
-                    const safeCards = Array.isArray(checkedCards) ? checkedCards.filter(Boolean) : [];
-                    
-                    const vendorPayload = { 
-                      id: vendor?.id || 'unknown_vendor',
-                      name: vendor?.name || 'Vendeur',
-                      rating: vendor?.rating || '500',
-                      items: safeCards,  // Format attendu par App.jsx (.reduce)
-                      cards: safeCards,  
-                      totalCardPrice: Number(totalCardPrice || 0), 
-                      shippingFee: Number(shippingFee || 2.50)
-                    };
-
-                    // 1. Sauvegarde dans le localStorage
-                    const cartKey = 'pokemarket_cart';
-                    let currentCart = {};
-                    try {
-                      const saved = localStorage.getItem(cartKey);
-                      if (saved) {
-                        const parsed = JSON.parse(saved);
-                        if (parsed && typeof parsed === 'object') {
-                          currentCart = parsed;
-                        }
-                      }
-                    } catch (err) {
-                      console.error("Erreur lecture localStorage", err);
-                    }
-
-                    if (!Array.isArray(currentCart)) {
-                      currentCart[vendorPayload.id] = vendorPayload;
-                    } else {
-                      currentCart = [vendorPayload];
-                    }
-
-                    localStorage.setItem(cartKey, JSON.stringify(currentCart));
-
-                    // 2. Mémorise l'onglet actif sur "cart" si ton app utilise le localStorage pour les onglets
-                    localStorage.setItem('active_tab', 'cart');
-
-                    // 3. Appel de la prop si elle existe
-                    if (onAddToCart) {
-                      onAddToCart(vendorPayload);
-                    }
-
-                    // 4. Recharge la page : App.jsx va relire le localStorage à l'allumage et affichera enfin le panier rempli !
-                    window.location.reload();
+                    handleAddToCart(vendor, checkedCards, totalCardPrice, shippingFee);
                   }}
                   disabled={!checkedCards || checkedCards.length === 0}
                   style={{ position: 'relative', zIndex: 50 }}
@@ -395,7 +415,6 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
 
                     return (
                       <div key={card.uniqueKey} className="grid grid-cols-12 items-center px-3 py-2 text-xs hover:bg-slate-900/50 transition-colors">
-                        
                         <div className="col-span-1 text-center flex justify-center">
                           <button 
                             onClick={() => toggleCardSelection(vendor.id, card.uniqueKey)}
@@ -455,7 +474,6 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
                   Voir les {vendor.cards.length} cartes disponibles sur la page dédiée →
                 </button>
               )}
-
             </div>
           );
         })}

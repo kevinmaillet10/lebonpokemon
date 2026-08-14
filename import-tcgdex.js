@@ -37,18 +37,37 @@ async function importTcgdexData() {
         continue;
       }
 
-      // 2. Récupérer le détail de l'extension et ses cartes
+      // 2. Récupérer le détail de l'extension
       const detailRes = await fetch(`https://api.tcgdex.net/v2/fr/sets/${set.id}`);
       const setDetail = await detailRes.json();
 
       if (setDetail && setDetail.cards && setDetail.cards.length > 0) {
-        const cardsToInsert = setDetail.cards.map(card => ({
-          id: card.id,
-          name: card.name,
-          extension_id: set.id,
-          image_url: card.image ? `${card.image}/high.png` : null,
-          rarity: card.rarity
-        }));
+        const cardsToInsert = [];
+        
+        console.log(`🔍 Récupération des détails pour ${setDetail.cards.length} cartes...`);
+
+        for (const basicCard of setDetail.cards) {
+          // On appelle l'API pour CHAQUE carte afin d'avoir les infos complètes
+          const cardRes = await fetch(`https://api.tcgdex.net/v2/fr/cards/${basicCard.id}`);
+          const card = await cardRes.json();
+
+          cardsToInsert.push({
+            id: card.id,
+            name: card.name,
+            extension_id: set.id,
+            image_url: card.image ? `${card.image}/low.webp` : null,
+            rarity: card.rarity || null,
+            variants: card.variants || {}, // TCGdex renvoie souvent un objet, pas un tableau
+            local_id: card.localId || card.number || null,
+            hp: card.hp ? parseInt(card.hp, 10) : null,
+            illustrator: card.illustrator || null,
+            category: card.category || null,
+            stage: card.stage || null,
+            regulation_mark: card.regulationMark || null,
+            types: card.types || [],
+            dex_id: card.dexId || (card.dexIds ? card.dexIds[0] : null) // dex_id est souvent un tableau ou un chiffre
+          });
+        }
 
         // Insertion par lots (batch) des cartes pour aller plus vite
         const { error: cardError } = await supabase
