@@ -21,7 +21,7 @@ import { redirectToStripeCheckout } from './stripeService';
 import NotificationBell from './NotificationBell';
 import KantoLeagueTab from './KantoLeagueTab';
 import Favorites from './Favorites';
-import Navbar from './Navbar';
+import NavBar from './NavBar';
 import rocheImg from './assets/badges/roche.png';
 import cascadeImg from './assets/badges/cascade.png';
 import foudreImg from './assets/badges/foudre.png';
