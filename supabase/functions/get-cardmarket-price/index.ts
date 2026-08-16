@@ -29,7 +29,6 @@ serve(async (req) => {
   }
 
   try {
-    console.log("=== DEBUT DE LA FONCTION EDGE ===");
     
     let body: any = {};
     try {

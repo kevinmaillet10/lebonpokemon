@@ -203,7 +203,6 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files || []);
-    // Calcul de l'espace restant pour atteindre 5 photos max au total (TCGdex compte pour 1 si présent + photos perso)
     const currentTotal = (selectedCard ? 1 : 0) + imageFiles.length;
     const remainingSlots = 5 - currentTotal;
 
@@ -272,7 +271,6 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
       }
 
       // 3. On transforme le tableau en une seule chaîne de texte séparée par des virgules
-      // Cela évite l'erreur "malformed array" tout en gardant toutes tes photos !
       const imagesString = imageUrls.join(',');
 
       // 4. Construction du Payload
@@ -286,7 +284,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
         quantity: parseInt(quantity, 10) || 1,
         condition: condition,
         finish: finish,
-        image_url: imagesString, // On envoie toutes les URLs collées avec des virgules
+        image_url: imagesString, 
       };
 
       // 5. Insertion en base

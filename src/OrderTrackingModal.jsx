@@ -26,7 +26,6 @@ export default function OrderTrackingModal({
   // Synchronisation forcée à chaque ouverture ou changement de currentStep
   useEffect(() => {
     if (isOpen) {
-      console.log("🔄 Modale ouverte - Statut reçu :", currentStep);
       setLocalStep(currentStep);
     }
   }, [isOpen, currentStep]);
@@ -136,10 +135,6 @@ export default function OrderTrackingModal({
 
   const handleActionClick = () => {
     if (currentStatut === 1) {
-      // Action pour l'étape 1 ("Voir ma transaction")
-      console.log("Action : Voir la transaction", orderId);
-      // Tu peux par exemple déclencher une redirection, ou fermer la modale, ou ouvrir une vue dédiée :
-      // onClose();
     } else if (currentStatut === 5) {
       setIsReportOpen(true);
     } else if (currentStatut === 6 && sellerId) {

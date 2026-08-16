@@ -87,10 +87,10 @@ export default function EditListingModal({ listing, onClose, onUpdated }) {
             >
               <option value="Normale">Normale</option>
               <option value="Reverse">Reverse</option>
+              <option value="Holo">Holo</option>
               <option value="Cosmo">Cosmo</option>
               <option value="Holo ligne">Holo ligne</option>
               <option value="Holo étoile">Holo étoile</option>
-              <option value="Holo mirage">Holo mirage</option>
               <option value="Master Ball">Master Ball</option>
               <option value="Poké Ball">Poké Ball</option>
               <option value="Stamp">Stamp</option>

@@ -236,12 +236,13 @@ export default function App() {
     fetchListings();
   }, []);
 
-  // Fonctions de gestion du panier
-  const addToCart = (listing) => {
+  // Fonction de gestion du panier corrigée
+  const addToCart = (listing, quantityToAdd = 1) => {
     setCart(prevCart => {
       const newCart = { ...prevCart };
-      const sellerId = listing.user_id;
-      const sellerName = listing.profiles?.username || "Vendeur";
+      const sellerId = listing.user_id || listing.seller_id;
+      const sellerName = listing.profiles?.username || listing.seller_name || "Vendeur";
+      const maxStock = listing.quantity || 1; // Le stock total dispo de l'annonce
 
       if (!newCart[sellerId]) {
         newCart[sellerId] = {
@@ -251,12 +252,30 @@ export default function App() {
       }
 
       const existingIndex = newCart[sellerId].items.findIndex(item => item.id === listing.id);
-      if (existingIndex === -1) {
-        newCart[sellerId].items.push(listing);
+      
+      if (existingIndex > -1) {
+        // L'article est déjà dans le panier : on incrémente
+        const currentItem = newCart[sellerId].items[existingIndex];
+        const newQty = Math.min((currentItem.quantity || 1) + quantityToAdd, maxStock);
+        
+        newCart[sellerId].items[existingIndex] = {
+          ...currentItem,
+          quantity: newQty
+        };
+      } else {
+        // Nouvel article : on retire la quantité initiale de 3 de l'annonce et on force à 1
+        const { quantity, ...listingWithoutQty } = listing;
+
+        newCart[sellerId].items.push({
+          ...listingWithoutQty,
+          quantity: quantityToAdd, // Forcé à 1 par défaut
+          maxStock: maxStock       // On conserve le stock max pour les boutons + / -
+        });
       }
 
       return newCart;
     });
+    
     alert("Article ajouté au panier !");
   };
 

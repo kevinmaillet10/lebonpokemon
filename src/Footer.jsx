@@ -6,7 +6,7 @@ export default function Footer() {
   return (
     <>
       <footer className="bg-[#121418] border-t border-slate-800 text-slate-400 text-xs py-8 px-6 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
             <span className="font-extrabold text-white text-sm">Le Bon Pokémon</span>
             <p>© {new Date().getFullYear()} — Tous droits réservés.</p>
@@ -44,7 +44,7 @@ export default function Footer() {
 
       {/* Modale d'affichage dynamique */}
       {activeModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-100 p-4">
           <div className="bg-[#1e232a] text-white p-6 rounded-xl max-w-md w-full border border-slate-700 shadow-2xl relative max-h-[90vh] flex flex-col">
             
             <h3 className="text-lg font-bold mb-3 shrink-0">

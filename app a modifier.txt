@@ -1,0 +1,128 @@
+app:
+
+// Active ou désactive le mode simulation en un clin d'œil
+const IS_SIMULATION_MODE = true;
+
+
+ici:
+  const handleCheckout = async (sellerId, sellerGroup, shipping, finalTotal) => {
+    console.log("DONNÉES REÇUES -> shipping:", shipping, "finalTotal:", finalTotal);
+
+    try {
+
+      const itemPrice = sellerGroup.items.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
+      const platformFee = Number((itemPrice * 0.05).toFixed(2));
+
+      // 1. Insertion de la commande principale
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          buyer_id: user.id,
+          seller_id: sellerId,
+          shipping_method: shippingMethodName,
+          shipping_cost: shippingCost,
+          item_price: itemPrice,
+          shipping_fee: shippingCost,
+          platform_fee: platformFee,
+          total_amount: finalTotal,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // 2. Insertion des lignes d'articles
+      const orderItems = sellerGroup.items.map(item => ({
+        order_id: orderData.id,
+        card_id: item.card_id || item.tcgdex_card_id || item.cards?.id,
+        vendor_id: sellerId,
+        quantity: item.quantity || 1,
+        price: item.price
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // 3. Mise à jour des stocks via la fonction sécurisée Supabase (RPC)
+      for (const item of sellerGroup.items) {
+        const listingId = item.id; 
+        if (!listingId) continue;
+
+        const orderedQty = Number(item.quantity) || 1;
+
+        const { error: rpcError } = await supabase.rpc('decrease_listing_stock', {
+          row_id: listingId,
+          qty_to_subtract: orderedQty
+        });
+
+        if (rpcError) throw rpcError;
+      }
+
+      // 4. Message automatique
+      const firstItem = sellerGroup.items[0];
+      const listingId = firstItem?.id;
+      const cardNamesList = sellerGroup.items.map(item => item.cards?.name || 'Carte').join(', ');
+
+      if (listingId) {
+        let { data: existingConv } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('listing_id', listingId)
+          .eq('buyer_id', user.id)
+          .eq('seller_id', sellerId)
+          .single();
+
+        let conversationId = existingConv?.id;
+
+        if (!conversationId) {
+          const { data: newConv } = await supabase
+            .from('conversations')
+            .insert({
+              listing_id: listingId,
+              buyer_id: user.id,
+              seller_id: sellerId,
+              updated_at: new Date()
+            })
+            .select()
+            .single();
+
+          if (newConv) conversationId = newConv.id;
+        }
+
+        if (conversationId) {
+          await supabase.from('messages').insert({
+            conversation_id: conversationId,
+            sender_id: user.id,
+            content: `[Achat validé] Commande passée pour un montant de ${finalTotal} € (Articles : ${cardNamesList}).`,
+            is_read: false
+          });
+        }
+      }
+
+      // Succès
+      alert("🎉 Commande simulée avec succès ! (Mode Bêta)");
+      
+      // Nettoyage propre du panier pour ce vendeur uniquement
+      setCart(prevCart => {
+        const newCart = { ...prevCart };
+        delete newCart[sellerId];
+        return newCart;
+      });
+
+      // 🌟 AJOUTE CETTE LIGNE : Rafraîchit la liste des annonces pour faire disparaître l'article vendu
+      if (typeof fetchListings === 'function') {
+        fetchListings();
+      }
+
+    } catch (err) {
+      console.error("Erreur détaillée lors du checkout :", err);
+      alert("Erreur Supabase : " + (err.message || "Une erreur est survenue lors de la validation."));
+    }
+  };
+à là!!!!!
+
+

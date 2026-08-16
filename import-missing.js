@@ -32,10 +32,7 @@ async function fetchWithRetry(url, retries = 5, delay = 2000) {
 }
 
 async function importMissingCards() {
-  console.log(`🎯 Lancement de l'importation ciblée pour ${TARGET_SERIES.length} séries récalcitrantes...\n`);
-
   for (const seriesId of TARGET_SERIES) {
-    console.log(`📥 Traitement de la série : ${seriesId}`);
     
     let page = 1;
     let pageSize = 250;
@@ -78,7 +75,6 @@ async function importMissingCards() {
         if (upsertError) {
           console.error(`❌ Erreur insertion Supabase (${seriesId} - Page ${page}):`, upsertError.message);
         } else {
-          console.log(`   ➔ ${cards.length} cartes importées (Page ${page})`);
         }
 
         if (page * pageSize >= data.totalCount) {
@@ -99,8 +95,6 @@ async function importMissingCards() {
     // Pause de 3 secondes entre chaque série
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
-
-  console.log("\n✨ Importation ciblée terminée !");
 }
 
 importMissingCards();

@@ -21,7 +21,7 @@ import { redirectToStripeCheckout } from './stripeService';
 import NotificationBell from './NotificationBell';
 import KantoLeagueTab from './KantoLeagueTab';
 import Favorites from './Favorites';
-import NavBar from './NavBar';
+import Navbar from './Navbar';
 import rocheImg from './assets/badges/roche.png';
 import cascadeImg from './assets/badges/cascade.png';
 import foudreImg from './assets/badges/foudre.png';
@@ -45,12 +45,14 @@ import MfaSetupModal from './MfaSetupModal';
 import TutorialModal from "./TutorialModal";
 import ConditionGuideView from './ConditionGuideView';
 import PokedexView from './PokedexView';
+import { leagueSteps } from './constants/kantoLeague';
+import { leagueSteps as baseLeagueSteps } from './constants/kantoLeague';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(() => {
     return !localStorage.getItem('hasSeenSplash');
   });
-  const [showTutorial, setShowTutorial] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false); // AJOUTEZ CETTE LIGNE
   const [currentView, setCurrentView] = useState('home');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBlock, setSelectedBlock] = useState('');
@@ -68,70 +70,119 @@ export default function App() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [showMfaSetupModal, setShowMfaSetupModal] = useState(false);
   const [mfaUser, setMfaUser] = useState(null);
-  const [globalSearch, setGlobalSearch] = useState('');
   
   const [selectedListing, setSelectedListing] = useState(null);
   const [editingListing, setEditingListing] = useState(null);
   const [activeConversationId, setActiveConversationId] = useState(null);
+  const [isMassListingOpen, setIsMassListingOpen] = useState(false);
   
   const [favoriteListings, setFavoriteListings] = useState([]);
   const [favoriteSellers, setFavoriteSellers] = useState([]);
   const [sellerId, setSellerId] = useState(null);
-  // Active ou désactive le mode simulation en un clin d'œil
-  const IS_SIMULATION_MODE = true;
 
-  // Effet global pour vérifier et débloquer automatiquement tous les badges liés au nombre de cartes
-  useEffect(() => {
-    if (!user) return;
+  const [totalCards, setTotalCards] = useState(0);
+  const [totalCardsCount, setTotalCardsCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
-    const checkBadgesFromSupabase = async () => {
-      try {
-        const { count, error } = await supabase
-          .from('listings')
-          .select('*', { count: 'exact', head: true })
-          .or(`seller_id.eq.${user.id},user_id.eq.${user.id}`);
+      // --- AJOUT POUR LE TUTORIEL ---
+      useEffect(() => {
+        const hasSeenTutorial = localStorage.getItem('has_seen_tutorial');
+        
+        if (!hasSeenTutorial) {
+          setTimeout(() => {
+            setShowTutorial(true);
+          }, 1000);
+        }
+      }, []);
+      
+  // Fonction unique et robuste pour vérifier et synchroniser les badges
+  const checkBadgesFromSupabase = async () => {
+    try {
+      if (!user) return;
 
-        if (!error && count !== null) {
-          
-          // Liste des badges basés sur le volume de cartes avec leurs seuils et images respectives
-          const cardCountBadges = [
-            { id: 'roche', threshold: 20, name: 'Badge Roche', desc: 'Enregistrer ses 20 premières cartes.', img: rocheImg },
-            { id: 'cascade', threshold: 200, name: 'Badge Cascade', desc: 'Atteindre 200 cartes enregistrées.', img: cascadeImg },
-            { id: 'ame', threshold: 700, name: 'Badge Âme', desc: 'Atteindre le palier de 700 cartes enregistrées.', img: ameImg },
-            { id: 'terre', threshold: 1200, name: 'Badge Terre', desc: 'Atteindre et enregistrer 1200 cartes.', img: terreImg },
-            { id: 'maitre-kanto', threshold: 5000, name: 'Maître de la Région de Kanto', desc: "L'accomplissement suprême : franchir 5000 cartes enregistrées.", img: championImg },
-          ];
+      // On récupère la quantité en vérifiant les deux colonnes possibles
+      const { data, error } = await supabase
+        .from('listings') 
+        .select('quantity')
+        .or(`user_id.eq.${user.id},seller_id.eq.${user.id}`);
 
-          // On parcourt les paliers pour trouver le premier non débloqué atteint
-          for (const badge of cardCountBadges) {
-            if (count >= badge.threshold) {
-              const storageKey = `popup_shown_${badge.id}_${user.id}`;
+      if (error) throw error;
+
+      if (data) {
+        // On calcule la vraie somme totale
+        const count = data.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+
+        // On récupère les badges actuels directement depuis Supabase (évite les données obsolètes)
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('badges')
+          .eq('id', user.id)
+          .single();
+
+        const currentBadges = profileData?.badges || [];
+
+        // Liste des paliers de badges
+        const cardCountBadges = [
+          { id: 'roche', threshold: 20, name: 'Badge Roche', desc: 'Enregistrer ses 20 premières cartes.', img: rocheImg },
+          { id: 'cascade', threshold: 200, name: 'Badge Cascade', desc: 'Atteindre 200 cartes enregistrées.', img: cascadeImg },
+          { id: 'ame', threshold: 700, name: 'Badge Âme', desc: 'Atteindre le palier de 700 cartes enregistrées.', img: ameImg },
+          { id: 'terre', threshold: 1200, name: 'Badge Terre', desc: 'Atteindre et enregistrer 1200 cartes.', img: terreImg },
+          { id: 'maitre-kanto', threshold: 5000, name: 'Maître de la Région de Kanto', desc: "L'accomplissement suprême : franchir 5000 cartes enregistrées.", img: championImg },
+        ];
+
+        for (const badge of cardCountBadges) {
+          if (count >= badge.threshold) {
+            const storageKey = `popup_shown_${badge.id}_${user.id}`;
+            
+            // Si le palier est atteint, que la popup n'a jamais été montrée, et que l'user ne l'a pas
+            if (!localStorage.getItem(storageKey) && !currentBadges.includes(badge.id)) {
+              setUnlockedBadgeModal({
+                name: badge.name,
+                description: badge.desc,
+                icon_url: badge.img
+              });
+              localStorage.setItem(storageKey, 'true');
               
-              if (!localStorage.getItem(storageKey)) {
-                setUnlockedBadgeModal({
-                  name: badge.name,
-                  description: badge.desc,
-                  icon_url: badge.img
-                });
-                localStorage.setItem(storageKey, 'true');
-                break; // Affiche un badge à la fois pour ne pas spammer l'utilisateur
-              }
+              // Mise à jour immédiate dans Supabase
+              const updatedBadges = [...currentBadges, badge.id];
+              await supabase
+                .from('profiles')
+                .update({ badges: updatedBadges })
+                .eq('id', user.id);
+              
+              break; // On traite un badge à la fois pour laisser la modale s'afficher
             }
           }
-
         }
-      } catch (err) {
-        console.error("Erreur lors de la vérification des badges :", err);
       }
+    } catch (err) {
+      console.error("Erreur lors de la vérification des badges :", err);
+    }
+  };
+
+  const handleAddCard = async (rawCardData) => {
+    // On s'assure que la quantité par défaut est de 1 si elle est absente
+    const cardData = {
+      ...rawCardData,
+      quantity: rawCardData.quantity || 1,
     };
 
-    checkBadgesFromSupabase();
-  }, [user]);
+    // 1. On insère dans Supabase
+    const { error } = await supabase.from('listings').insert(cardData);
+
+    if (error) {
+      console.error("Erreur lors de l'ajout :", error);
+      return;
+    }
+
+    // 2. Rafraîchissement des listes
+    await fetchListings();
+  };
 
   const handleSplashFinish = () => {
-    localStorage.setItem('hasSeenSplash', 'true'); // 👈 Ajoute cette ligne
-    setShowSplash(false);      // Ferme l'animation
-    setIsAuthOpen(true);       // Ouvre le modal de connexion
+    localStorage.setItem('hasSeenSplash', 'true'); 
+    setShowSplash(false);       // Ferme l'animation de démarrage
+    setIsAuthOpen(true);        // Ouvre le modal de connexion
   };
   
   // Fonction pour basculer (ajouter/retirer) une carte des favoris avec Supabase
@@ -261,53 +312,13 @@ export default function App() {
   };
 
   const handleCheckout = async (sellerId, sellerGroup, shipping, finalTotal) => {
-    console.log("DONNÉES REÇUES -> shipping:", shipping, "finalTotal:", finalTotal);
 
     try {
-      const shippingMethodName = shipping?.name || 'Mondial Relay';
-      const shippingCost = shipping?.price ?? 4.40;
+      const shippingMethodName = shipping?.name || 'Lettre Suivante';
+      const shippingCost = shipping?.price || 2.50;
 
       const itemPrice = sellerGroup.items.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
       const platformFee = Number((itemPrice * 0.05).toFixed(2));
-
-      // 🟡 MODE SIMULATION
-      if (typeof IS_SIMULATION_MODE !== 'undefined' && IS_SIMULATION_MODE) {
-        console.log("🟡 [SIMULATION] Commande validée fictivement pour le vendeur :", sellerGroup.sellerName);
-        alert(`✅ Simulation réussie !\nMode : ${shippingMethodName}\nTotal : ${finalTotal.toFixed(2)} €`);
-        
-        // 🔹 MISE A JOUR DU STOCK VIA LA FONCTION RPC (comme en mode réel)
-        try {
-          for (const item of sellerGroup.items) {
-            const listingId = item.id; 
-            if (listingId) {
-              const orderedQty = Number(item.quantity) || 1;
-
-              const { error: rpcError } = await supabase.rpc('decrease_listing_stock', {
-                row_id: listingId,
-                qty_to_subtract: orderedQty
-              });
-
-              if (rpcError) throw rpcError;
-            }
-          }
-        } catch (dbErr) {
-          console.error("Erreur lors de la mise à jour des stocks :", dbErr);
-        }
-
-        // Nettoyage propre du panier pour ce vendeur uniquement
-        setCart(prevCart => {
-          const newCart = { ...prevCart };
-          delete newCart[sellerId];
-          return newCart;
-        });
-
-        // 🔹 ACTUALISER LES ANNONCES MAINTENANT (AVANT LE RETURN)
-        if (typeof fetchListings === 'function') {
-          await fetchListings();
-        }
-
-        return; // On stoppe l'exécution ici proprement
-      }
 
       // 1. Insertion de la commande principale
       const { data: orderData, error: orderError } = await supabase
@@ -400,7 +411,7 @@ export default function App() {
       }
 
       // Succès
-      alert("🎉 Commande validée avec succès !");
+      alert("Commande validée avec succès !");
       
       // Nettoyage propre du panier pour ce vendeur uniquement
       setCart(prevCart => {
@@ -409,7 +420,7 @@ export default function App() {
         return newCart;
       });
 
-      // Rafraîchit la liste des annonces pour faire disparaître l'article vendu
+      // 🌟 AJOUTE CETTE LIGNE : Rafraîchit la liste des annonces pour faire disparaître l'article vendu
       if (typeof fetchListings === 'function') {
         fetchListings();
       }
@@ -479,14 +490,6 @@ export default function App() {
 
     setMfaUser(userObj);
 
-    // --- AJOUT POUR LE TUTORIEL ---
-    const hasSeenTutorial = localStorage.getItem('has_seen_tutorial');
-    if (!hasSeenTutorial) {
-      setTimeout(() => {
-        setShowTutorial(true);
-      }, 1000);
-    }
-
     // Vérifier si l'utilisateur a déjà configuré un facteur MFA vérifié
     const { data: factors, error } = await supabase.auth.mfa.listFactors();
     if (!error) {
@@ -500,55 +503,50 @@ export default function App() {
   };
 
   const addToCart = (listing, quantityToAdd = 1) => {
+    
     const sellerId = listing.seller_id || listing.user_id || 'unknown_seller';
     const sellerName = listing.profiles?.username || listing.seller_name || "Vendeur";
+    const maxStock = listing.quantity || 1; // Le stock réel max de l'annonce
 
     setCart(prevCart => {
-      // Récupère le groupe existant ou crée-le proprement de manière immuable
-      const sellerGroup = prevCart[sellerId] || {
-        sellerName: sellerName,
-        items: []
-      };
+      // Sécurité pour s'assurer que prevCart est bien un objet
+      const cartObj = prevCart || {};
+      
+      // Récupère ou initialise le groupe du vendeur
+      const existingGroup = cartObj[sellerId] || { sellerName, items: [] };
+      
+      // Vérifie si l'article est déjà dans le panier de ce vendeur
+      const existingItemIndex = existingGroup.items.findIndex(item => item.id === listing.id);
+      let updatedItems = [...existingGroup.items];
 
-      // La quantité à ajouter (1 par défaut depuis l'accueil, ou la valeur choisie dans la modale)
-      const requestedQty = Number(quantityToAdd) > 0 ? Number(quantityToAdd) : 1;
-    
-      // Le stock maximal disponible pour cette annonce
-      const maxStock = Number(listing.stock) || Number(listing.quantity) || 1;
-
-      // On crée un NOUVEAU tableau (copie) pour respecter l'immutabilité de React
-      let updatedItems = [...sellerGroup.items];
-      const existingIndex = updatedItems.findIndex(item => item.id === listing.id);
-
-      if (existingIndex > -1) {
-        const currentItem = updatedItems[existingIndex];
-        const currentInCart = currentItem.quantity || 1;
-        const newTotalQty = Math.min(maxStock, currentInCart + requestedQty);
-
-        updatedItems[existingIndex] = {
-          ...currentItem,
-          ...listing,
-          quantity: newTotalQty,
-          maxStock: maxStock
+      if (existingItemIndex > -1) {
+        // L'article existe déjà : on incrémente sans dépasser le stock max
+        const currentItem = updatedItems[existingItemIndex];
+        const newQty = Math.min((currentItem.quantity || 1) + quantityToAdd, maxStock);
+        
+        updatedItems[existingItemIndex] = { 
+          ...currentItem, 
+          quantity: newQty,
+          maxStock: maxStock 
         };
       } else {
-        console.log("Listing cliqué :", listing);
-        console.log("tcgdex_card_id évalué :", listing.tcgdex_card_id);
+        // On extrait 'quantity' de l'annonce pour ignorer complètement le 3 initial
+        const { quantity, ...listingClean } = listing;
 
-        // On ajoute le nouvel élément dans le nouveau tableau
+        // Nouvel article dans le panier : on force la quantité à 1 (ou quantityToAdd)
         updatedItems.push({
-          ...listing,
+          ...listingClean,
           card_id: listing.tcgdex_card_id,
-          quantity: requestedQty,
-          maxStock: maxStock
+          quantity: quantityToAdd, // <--- Forcé à 1
+          maxStock: maxStock       // Stock max conservé pour les boutons + / -
         });
       }
 
-      // On retourne un nouvel objet global pour que React détecte le changement
+      // On retourne le nouveau state mis à jour pour ce vendeur
       return {
-        ...prevCart,
+        ...cartObj,
         [sellerId]: {
-          ...sellerGroup,
+          ...existingGroup,
           items: updatedItems
         }
       };
@@ -823,7 +821,7 @@ export default function App() {
       const seriesName = matchingSeries ? matchingSeries.name : '';
       const blockName = matchingSeries ? matchingSeries.block_name : '';
 
-      // 2. Filtre Bloc (corrigé sans cassure de syntaxe)
+      // 2. Filtre Bloc 
       const matchesBlock = !selectedBlock || 
         (blockName && blockName.toLowerCase() === selectedBlock.toLowerCase()) ||
         (item.extension_id && item.extension_id.toLowerCase().startsWith(selectedBlock.toLowerCase())) ||
@@ -856,11 +854,6 @@ export default function App() {
       return matchesSearch && matchesBlock && matchesSeries && matchesDept && matchesFinish && matchesCondition;
     });
   }, [listings, searchQuery, selectedBlock, selectedSeriesFilter, selectedRegion, filterFinish, filterCondition, seriesList]);
-  
-  // Calcul du nombre total de cartes possédées/listées pour la Ligue de Kanto
-  const totalCards = useMemo(() => {
-    return userListings.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-  }, [userListings]);
   
   useEffect(() => {
     async function fetchFavorites() {
@@ -917,42 +910,85 @@ export default function App() {
     fetchFavoriteSellers();
   }, [user]);
 
-return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-800 relative" onClick={() => isUserMenuOpen && setIsUserMenuOpen(false)}>
+  useEffect(() => {
+    async function fetchCardCount() {
+      if (!user) return;
+      
+      const { data, error } = await supabase.rpc('get_total_cards_quantity', { 
+        p_user_id: user.id 
+      });
+
+      if (!error) {
+        setTotalCardsCount(data || 0);
+      } else {
+        console.error("Erreur lors du comptage SQL :", error);
+      }
+    }
+
+    fetchCardCount();
+  }, [user, listings]);
+
+  return (
+    <div className="min-h-screen bg-slate-100 font-sans text-slate-800 relative bg-slate-900" onClick={() => isUserMenuOpen && setIsUserMenuOpen(false)}>
       {/* 1. L'animation de bienvenue se place en tout premier par-dessus tout */}
       {showSplash && (
         <WelcomeSplash onFinish={handleSplashFinish} />
       )}
 
-    {/* HEADER */}
+      {/* Bandeau Mode Bêta Global */}
+      <div className="bg-amber-500 text-slate-950 px-4 py-2 text-center font-bold text-sm shadow-md flex items-center justify-center gap-2">
+        <span>🚧</span>
+        <span>Mode Bêta / Simulation : Aucun paiement réel. Les annonces et les envois sont fictifs. Amusez-vous à tester !</span>
+      </div>
+
+      {/* HEADER */}
       <header className="bg-slate-900 text-white py-4 px-6 shadow-md border-b border-slate-800 sticky top-0 z-40">
-        {IS_SIMULATION_MODE && (
-          <div style={{ backgroundColor: '#f59e0b', color: 'white', textAlign: 'center', padding: '8px', fontSize: '14px', fontWeight: 'bold' }}>
-            🚧 Mode Bêta / Simulation : Aucun paiement réel. Les annonces et les envois sont fictifs. Amusez-vous à tester !
-          </div>
-        )}
         <div className="w-full flex justify-between items-center">
+
           {/* Logo et Nom du site */}
           <div 
             onClick={() => { setCurrentView('home'); setSelectedSeries(null); }}
             className="flex items-center gap-3.5 cursor-pointer group"
           >
-            {/* Icône style Master Ball */}
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-fuchsia-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-purple-500/25 border border-purple-400/40 group-hover:scale-105 transition-transform relative overflow-hidden">
-              {/* Ligne horizontale de la Pokéball */}
-              <div className="absolute inset-x-0 top-1/2 h-1 bg-indigo-950/80 -translate-y-1/2"></div>
-              {/* Bouton central avec le 'M' */}
-              <div className="w-4.5 h-4.5 rounded-full border-2 border-white bg-purple-900 flex items-center justify-center z-10 shadow-inner">
-                <span className="text-[9px] font-black text-fuchsia-300 leading-none">M</span>
+            {/* Icône style Master Ball fidèle à la référence */}
+            <div className="w-14 h-14 rounded-full relative overflow-hidden shadow-lg shadow-purple-500/30 border-2 border-slate-900 flex flex-col group-hover:scale-105 transition-transform">
+              
+              {/* Partie supérieure (Violette Master Ball) */}
+              <div className="h-1/2 bg-purple-700 relative w-full flex items-center justify-center">
+                
+                {/* Cercle rose gauche avec reflet blanc */}
+                <div className="absolute left-1 top-1 w-3 h-3 bg-fuchsia-500 rounded-full border border-fuchsia-600 overflow-hidden shadow-inner">
+                  <div className="absolute top-0.5 left-0.5 w-1 h-1 bg-white rounded-full"></div>
+                </div>
+                
+                {/* Cercle rose droit avec reflet blanc */}
+                <div className="absolute right-1 top-1 w-3 h-3 bg-fuchsia-500 rounded-full border border-fuchsia-600 overflow-hidden shadow-inner">
+                  <div className="absolute top-0.5 left-0.5 w-1 h-1 bg-white rounded-full"></div>
+                </div>
+                
+                {/* Lettre M blanche stylisée */}
+                <span className="text-white font-black text-[11px] tracking-tighter mt-1 drop-shadow-sm">M</span>
               </div>
+
+              {/* Ligne / Ceinture noire centrale */}
+              <div className="absolute inset-x-0 top-1/2 h-1 bg-slate-950 -translate-y-1/2 z-10"></div>
+
+              {/* Partie inférieure (Grise / Blanche) */}
+              <div className="h-1/2 bg-slate-200 w-full"></div>
+
+              {/* Bouton central de la Pokéball */}
+              <div className="absolute inset-0 m-auto w-3.5 h-3.5 rounded-full bg-white border-2 border-slate-950 flex items-center justify-center z-20 shadow-sm">
+                <div className="w-1 h-1 rounded-full bg-slate-800"></div>
+              </div>
+
             </div>
             
             <div>
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white inline-block origin-left scale-x-125">
                 Le Bon <span className="text-purple-400">Pokémon</span>
               </h1>
               <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-                Petites Annonces & Ventes
+                Marketplace & Petites Annonces de Cartes Pokémon entre particuliers
               </p>
             </div>
           </div>
@@ -982,12 +1018,15 @@ return (
               <span>🎯</span> Optimiser mes achats
             </button>
 
-            {/* BOUTON POKÉDEX */}
-            <button 
-              onClick={() => { setCurrentView('pokedex'); setIsUserMenuOpen(false); }}
-              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-1.5 border border-slate-700"
+            <button
+              onClick={() => setCurrentView('pokedex')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                currentView === 'pokedex'
+                  ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/30'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+              }`}
             >
-              <span className="text-purple-400">📖</span> Pokédex
+              📖 Pokédex
             </button>
 
             {/* BOUTON MA COLLECTION */}
@@ -1021,24 +1060,31 @@ return (
                   >
                     {/* --- AVATAR AVEC CADRE RPG & BADGE DYNAMIQUE --- */}
                     {(() => {
-                      // Utilise ta variable réelle de cartes (ex: totalCards ou userListings.length)
-                      const totalCardsCount = typeof totalCards !== 'undefined' ? totalCards : (userListings?.length || 0);
+                      // 1. Récupère le nombre de cartes en toute sécurité (via le state ou la longueur de la liste)
+                      const currentCount = typeof totalCardsCount !== 'undefined' ? totalCardsCount : (userListings?.length || 0);
 
-                      // Liste de tous les paliers de Kanto
+                      // 2. Mémorise le record max de cartes atteint (pour que le badge reste acquis à vie)
+                      const previousMax = parseInt(localStorage.getItem('max_cards_reached') || '0', 10);
+                      const effectiveCardsCount = Math.max(currentCount, previousMax);
+                      if (effectiveCardsCount > previousMax) {
+                        localStorage.setItem('max_cards_reached', effectiveCardsCount.toString());
+                      }
+
+                      // 3. Liste de tous les paliers de Kanto (utilise effectiveCardsCount)
                       const leagueSteps = [
-                        { id: 'roche', target: 20, current: Math.min(totalCardsCount, 20), icon: rocheImg },
-                        { id: 'cascade', target: 200, current: Math.min(totalCardsCount, 200), icon: cascadeImg },
+                        { id: 'roche', target: 20, current: Math.min(effectiveCardsCount, 20), icon: rocheImg },
+                        { id: 'cascade', target: 200, current: Math.min(effectiveCardsCount, 200), icon: cascadeImg },
                         { id: 'foudre', target: 1, current: 0, icon: foudreImg },
                         { id: 'prisme', target: 1, current: 0, icon: prismeImg },
-                        { id: 'ame', target: 700, current: Math.min(totalCardsCount, 700), icon: ameImg },
+                        { id: 'ame', target: 700, current: Math.min(effectiveCardsCount, 700), icon: ameImg },
                         { id: 'marais', target: 100, current: 0, icon: maraisImg },
                         { id: 'volcan', target: 10, current: 0, icon: volcanImg },
-                        { id: 'terre', target: 1200, current: Math.min(totalCardsCount, 1200), icon: terreImg },
+                        { id: 'terre', target: 1200, current: Math.min(effectiveCardsCount, 1200), icon: terreImg },
                         { id: 'conseil-olga', target: 1, current: 0, icon: olgaImg },
                         { id: 'conseil-aldo', target: 100, current: 0, icon: aldoImg },
                         { id: 'conseil-agatha', target: 1, current: 0, icon: agathaImg },
                         { id: 'conseil-peter', target: 1, current: 0, icon: peterImg },
-                        { id: 'maitre-kanto', target: 5000, current: Math.min(totalCardsCount, 5000), icon: championImg },
+                        { id: 'maitre-kanto', target: 5000, current: Math.min(effectiveCardsCount, 5000), icon: championImg },
                       ];
 
                       // Récupère uniquement les badges débloqués
@@ -1067,7 +1113,7 @@ return (
                               : 'border-slate-600 opacity-50'
                           }`}></div>
 
-                          {/* Affiche le vrai badge de la BDD/du tableau dans le coin s'il y en a un de débloqué */}
+                          {/* Affiche le vrai badge dans le coin s'il y en a un de débloqué */}
                           {highestBadge && (
                             <div className="absolute -bottom-1 -right-1 bg-slate-900 text-white w-7 h-7 rounded-full border border-slate-700 shadow-sm flex items-center justify-center overflow-hidden p-0.5">
                               <img src={highestBadge.icon} alt="Badge" className="w-full h-full object-contain drop-shadow" />
@@ -1143,15 +1189,12 @@ return (
                         💬 Messagerie
                       </button>
 
-                      <a 
-                        href="https://forms.gle/VXXyQnkXKfhDKQ7HA" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-3.5 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all hover:scale-105 cursor-pointer text-xs uppercase tracking-wider border border-amber-400/50"
+                      <button 
+                        onClick={() => window.open('https://docs.google.com/forms/d/e/1FAIpQLSc3ReFe89UxRat7-0oStUYtN2BaI0EW7tWaR9hsJiYeQbzPgQ/viewform', '_blank')}
+                        className="w-full text-left px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg flex items-center gap-2 transition-colors my-2 cursor-pointer shadow-sm"
                       >
-                        <span className="animate-pulse w-2 h-2 rounded-full bg-red-600"></span>
-                        <span>📢 Donnez votre avis</span>
-                      </a>
+                        <span>📢</span> DONNEZ VOTRE AVIS
+                      </button>
 
                       <div className="border-t border-slate-100 my-1"></div>
 
@@ -1176,14 +1219,27 @@ return (
           </div>
         </div>
       </header>
-      
-      {/* MAIN CONTENT AREA */}
-      <main className="w-full p-6">
+
+      {/* ================= CONTENEUR GLOBAL DES 3 COLONNES ================= */}
+      <div className="relative bg-slate-900 max-w-[1920px] mx-auto flex justify-between px-4 flex-grow">
+
+        {/* 1. BANNIÈRE GAUCHE (Fixée au bord tout à gauche de l'écran) */}
+        <div className="hidden 2xl:block fixed left-0 top-[110px] w-[650px] h-[calc(100vh-110px)] z-0 pointer-events-none">
+          <img 
+            src="/banniere/pokemon%20gauche.png" 
+            alt="Bannière Gauche" 
+            className="w-full h-full object-cover opacity-100"
+          />
+        </div>
+      </div>
+
+      {/* ================= CONTENU CENTRAL ================= */}
+      <main className="w-full xl:ml-[310px] xl:mr-[310px] xl:max-w-[calc(100%-620px)] mx-auto px-4 py-6 z-10 relative">
         {currentView === 'inbox' ? (
-          <InboxView 
-            currentUserId={user?.id} 
-            activeConversationId={activeConversationId} 
-            onBack={() => setCurrentView('home')} 
+          <InboxView
+            currentUserId={user?.id}
+            activeConversationId={activeConversationId}
+            onBack={() => setCurrentView('home')}
           />
         ) : currentView === 'cart' ? (
           <div className="max-w-4xl mx-auto space-y-6">
@@ -1216,8 +1272,8 @@ return (
                 // Calcule le sous-total des articles du vendeur
                 const subTotal = sellerGroup.items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
   
-                // Définit proprement le mode de livraison actuel pour ce vendeur (avec Mondial Relay par défaut)
-                const currentShipping = shippingMethods[sellerId] || { name: 'Mondial Relay', price: 4.40, pointRelais: null };
+                // Définit proprement le mode de livraison actuel pour ce vendeur (avec valeurs par défaut)
+                const currentShipping = shippingMethods[sellerId] || { name: 'Lettre Suivante', price: 2.50 };
   
                 // Calcule le total final avec le port
                 const totalWithShipping = subTotal + currentShipping.price;
@@ -1303,17 +1359,17 @@ return (
 
                       <div className="px-6 py-4 space-y-4">
                         <span className="text-xs font-bold text-slate-700 block">Mode de livraison :</span>
-
+ 
                         {/* SECTION : EN POINT RETRAIT */}
                         <div className="space-y-2">
                           <span className="text-xs font-semibold text-slate-600 block">En point retrait</span>
-                          
+    
                           <label className="flex items-center justify-between p-3 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-500 bg-white transition">
                             <div className="flex items-center gap-3">
                               <input 
                                 type="radio" 
                                 name={`shipping-${sellerId}`} 
-                                checked={currentShipping?.name === 'Mondial Relay' || !currentShipping}
+                                checked={currentShipping?.name === 'Mondial Relay'}
                                 onChange={() => {
                                   setShippingMethods({
                                     ...shippingMethods,
@@ -1336,7 +1392,7 @@ return (
 
                           {/* Bloc Point Relais Sélectionné / À choisir */}
                           {currentShipping?.name === 'Mondial Relay' && (
-                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                            <div className="ml-7 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                               {currentShipping.pointRelais ? (
                                 <div className="flex justify-between items-center text-xs">
                                   <div>
@@ -1364,10 +1420,33 @@ return (
                           )}
                         </div>
 
-                        {/* SECTION : À DOMICILE / AUTRE */}
+                        {/* SECTION : À DOMICILE */}
                         <div className="space-y-2">
                           <span className="text-xs font-semibold text-slate-600 block">À domicile / Autre</span>
-                          
+    
+                          {/* Lettre Suivante */}
+                          <label className="flex items-center justify-between p-3 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-500 bg-white transition">
+                            <div className="flex items-center gap-3">
+                              <input 
+                                type="radio" 
+                                name={`shipping-${sellerId}`} 
+                                checked={currentShipping?.name === 'Lettre Suivante' || !currentShipping}
+                                onChange={() => {
+                                  setShippingMethods({
+                                    ...shippingMethods,
+                                    [sellerId]: { name: 'Lettre Suivante', price: 2.50 }
+                                  });
+                                }}
+                                className="text-indigo-600 focus:ring-indigo-500" 
+                              />
+                              <div>
+                                <p className="font-medium text-xs text-slate-900">Lettre Suivante</p>
+                                <p className="text-[11px] text-slate-500">Idéal pour les cartes</p>
+                              </div>
+                            </div>
+                            <span className="font-bold text-xs text-slate-900">2,50 €</span>
+                          </label>
+
                           {/* Colissimo */}
                           <label className="flex items-center justify-between p-3 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-500 bg-white transition">
                             <div className="flex items-center gap-3">
@@ -1408,17 +1487,17 @@ return (
                               />
                               <div>
                                 <p className="font-medium text-xs text-slate-900">Remise en main propre</p>
-                                <p className="text-[11px] text-slate-500">Gratuit • Fonds débloqués lors de la rencontre</p>
+                                <p className="text-[11px] text-slate-500">Gratuit</p>
                               </div>
                             </div>
                             <span className="font-bold text-xs text-slate-900">0,00 €</span>
                           </label>
                         </div>
 
-                        <div className="text-xs text-slate-600 text-right pt-2">
-                          Frais de port : <span className="font-bold text-slate-900">{(currentShipping?.price ?? 4.40).toFixed(2)} €</span>
-                        </div>
+                      <div className="text-xs text-slate-600 text-right pt-2">
+                        Frais de port : <span className="font-bold text-slate-900">{(currentShipping?.price ?? 2.50).toFixed(2)} €</span>
                       </div>
+                    </div>
 
                     {/* --- BLOC RÉCAPITULATIF DES FRAIS & PROTECTION ACHETEUR (5%) --- */}
                     <div className="mx-6 mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-sm">
@@ -1454,7 +1533,7 @@ return (
             )}
           </div>
         ) : currentView === 'league' ? (
-          <KantoLeagueTab totalCards={totalCards} />
+          <KantoLeagueTab totalCards={totalCards} user={user} />
         ) : currentView === 'series-select' && !selectedSeries ? (
           <div className="min-h-screen bg-[#16181d] text-white w-full px-6 py-6 space-y-8">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 bg-[#1e222b] p-4 rounded-2xl border border-slate-700/60 shadow-sm">
@@ -1783,7 +1862,6 @@ return (
             {/* 1. Vue Accueil (Home) */}
             {currentView === 'home' && (
               <Home 
-                user={user}
                 setCurrentView={setCurrentView}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
@@ -1844,11 +1922,8 @@ return (
             {currentView === 'pokedex' && (
               <PokedexView 
                 user={user} 
-                setCurrentView={setCurrentView}
-                onNavigateToShop={(pokemonName) => {
-                  setSearchQuery(pokemonName); // Met à jour le terme de recherche
-                  setCurrentView('home');      // Redirige vers la boutique
-                }}
+                currentUserId={user?.id} 
+                onBack={() => setCurrentView('home')} 
               />
             )}
 
@@ -1897,6 +1972,15 @@ return (
           </main>
         )}
       </main>
+
+      {/* 2. BANNIÈRE DROITE (Collée au bord tout à droite de l'écran - VÉRIFIE BIEN "droite.png") */}
+      <div className="hidden 2xl:block fixed right-0 top-[110px] w-[650px] h-[calc(100vh-110px)] z-0 pointer-events-none">
+        <img 
+          src="/banniere/pokemon%20droite.png" 
+          alt="Bannière Droite" 
+          className="w-full h-full object-cover opacity-100"
+        />
+      </div>
       
       {/* Modales */}
       {isAuthOpen && (
@@ -1906,11 +1990,16 @@ return (
           onSuccess={handleLoginSuccess} 
         />
       )}
-
+      
       {/* --- AJOUTEZ CETTE PARTIE ICI --- */}
       {/* Tutoriel de bienvenue à la première connexion */}
       {showTutorial && (
-        <TutorialModal onClose={() => setShowTutorial(false)} />
+        <TutorialModal 
+          onClose={() => {
+            localStorage.setItem('has_seen_tutorial', 'true'); // ⚡ Enregistre qu'il a été vu
+            setShowTutorial(false); // ⚡ Ferme la modale
+          }} 
+        />
       )}
 
       {isCreateOpen && <CreateListingModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} onCreated={fetchListings} />}
@@ -1935,9 +2024,24 @@ return (
 
       {isCreateOpen && (
         <CreateListingModal 
-          isOpen={isCreateOpen} 
+          isOpen={isCreateOpen}
           onClose={() => setIsCreateOpen(false)}
-          onCreated={fetchListings} // <--- Ajoutez cette ligne
+          onCreated={async () => {
+            await fetchListings();
+            await checkBadgesFromSupabase(); // ⚡ Badge vérifié ici après l'ajout
+          }}
+        />
+      )}
+
+      {/* Modale d'ajout en masse */}
+      {isMassListingOpen && (
+        <MassListing 
+          isOpen={isMassListingOpen}
+          onClose={() => setIsMassListingOpen(false)}
+          onCreated={async () => {
+            await fetchListings();
+            await checkBadgesFromSupabase(); // ⚡ Badge vérifié ici aussi après l'ajout en masse
+          }}
         />
       )}
 

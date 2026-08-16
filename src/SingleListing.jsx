@@ -136,7 +136,7 @@ export default function SingleListing({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (onAddToCart) onAddToCart(listing);
+              if (onAddToCart) onAddToCart(listing, 1); // <-- On force explicitement la quantité à 1 ici
             }}
             className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 rounded-2xl transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
           >

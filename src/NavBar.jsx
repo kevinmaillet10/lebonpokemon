@@ -100,16 +100,6 @@ export default function Navbar({
           </button>
         )}
 
-        <a 
-          href="TON_LIEN_GOOGLE_FORM" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-3.5 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all hover:scale-105 cursor-pointer text-xs uppercase tracking-wider border border-amber-400/50"
-        >
-          <span className="animate-pulse w-2 h-2 rounded-full bg-red-600"></span>
-          <span>📢 Donnez votre avis</span>
-        </a>
-
         {/* Bouton Notifications */}
         <button
           onClick={onOpenNotifications}
@@ -174,6 +164,7 @@ export default function Navbar({
                   </div>
                 )}
               </div>
+            
               {/* ----------------------------------------------------------- */}
 
               <span className="text-xs font-bold pr-1">{user.user_metadata?.full_name || user.email}</span>

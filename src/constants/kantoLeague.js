@@ -1,111 +1,120 @@
-export const KANTO_STAGES = [
-  // --- LES 8 BADGES D'ARÈNE ---
+import rocheImg from '../assets/badges/roche.png';
+import cascadeImg from '../assets/badges/cascade.png';
+import foudreImg from '../assets/badges/foudre.png';
+import prismeImg from '../assets/badges/prisme.png';
+import ameImg from '../assets/badges/âme.png';
+import maraisImg from '../assets/badges/marais.png';
+import volcanImg from '../assets/badges/volcan.png';
+import terreImg from '../assets/badges/terre.png';
+import olgaImg from '../assets/badges/Olga.png';
+import aldoImg from '../assets/badges/Aldo.png';
+import agathaImg from '../assets/badges/Agatha.png';
+import peterImg from '../assets/badges/Peter.png';
+import championImg from '../assets/badges/champion.png';
+
+export const leagueSteps = [
   {
-    id: 'badge_roche',
-    name: 'Badge Roche',
-    category: 'arene',
-    target: 5,
-    metric: 'total_cards',
-    description: 'Enregistrer ses 5 premières cartes.'
+    id: 'roche',
+    category: 'badges',
+    title: 'Badge Roche',
+    description: 'Enregistrer ses 20 premières cartes.',
+    target: 20,
+    icon: rocheImg,
   },
   {
-    id: 'badge_cascade',
-    name: 'Badge Cascade',
-    category: 'arene',
-    target: 50,
-    metric: 'total_cards',
-    description: 'Atteindre 50 cartes enregistrées.'
-  },
-  {
-    id: 'badge_foudre',
-    name: 'Badge Foudre',
-    category: 'arene',
-    target: 1,
-    metric: 'filter_or_variants_used',
-    description: 'Utiliser les filtres de tri ou organiser ses doublons par versions (Standard / Reverse).'
-  },
-  {
-    id: 'badge_prisme',
-    name: 'Badge Prisme',
-    category: 'arene',
-    target: 1,
-    metric: 'price_history_checked',
-    description: 'Mettre à jour les données Cardmarket ou consulter l\'historique des prix d\'une carte.'
-  },
-  {
-    id: 'badge_ame',
-    name: 'Badge Âme',
-    category: 'arene',
+    id: 'cascade',
+    category: 'badges',
+    title: 'Badge Cascade',
+    description: 'Atteindre 200 cartes enregistrées.',
     target: 200,
-    metric: 'total_cards',
-    description: 'Atteindre le palier de 200 cartes enregistrées.'
+    icon: cascadeImg,
   },
   {
-    id: 'badge_marais',
-    name: 'Badge Marais',
-    category: 'arene',
+    id: 'foudre',
+    category: 'badges',
+    title: 'Badge Foudre',
+    description: 'Utiliser les filtres de tri ou organiser ses doublons par versions (Standard / Reverse).',
     target: 1,
-    metric: 'series_organized',
-    description: 'Classer et organiser un volume important de cartes par séries.'
+    icon: foudreImg,
   },
   {
-    id: 'badge_volcan',
-    name: 'Badge Volcan',
-    category: 'arene',
-    target: 10,
-    metric: 'price_trend_analyzed',
-    description: 'Analyser et comparer les fluctuations de prix sur 30 jours de 10 cartes différentes.'
-  },
-  {
-    id: 'badge_terre',
-    name: 'Badge Terre',
-    category: 'arene',
-    target: 500,
-    metric: 'total_cards',
-    description: 'Atteindre et enregistrer 500 cartes.'
-  },
-
-  // --- LA LIGUE DES 4 ---
-  {
-    id: 'conseil_amza',
-    name: 'Conseil 4 - Amza (Le Marchand)',
-    category: 'ligue',
+    id: 'prisme',
+    category: 'badges',
+    title: 'Badge Prisme',
+    description: "Mettre à jour les données Cardmarket ou consulter l'historique des prix d'une carte.",
     target: 1,
-    metric: 'market_tracking_active',
-    description: 'Réaliser un suivi régulier des prix du marché pour optimiser ses fiches de vente.'
+    icon: prismeImg,
   },
   {
-    id: 'conseil_oli',
-    name: 'Conseil 4 - Oli (L\'Organisateur)',
-    category: 'ligue',
+    id: 'ame',
+    category: 'badges',
+    title: 'Badge Âme',
+    description: 'Atteindre le palier de 700 cartes enregistrées.',
+    target: 700,
+    icon: ameImg,
+  },
+  {
+    id: 'marais',
+    category: 'badges',
+    title: 'Badge Marais',
+    description: 'Classer et organiser un volume important de cartes par séries.',
     target: 100,
-    metric: 'bulk_sorted_sv',
-    description: 'Maître du tri de masse — Avoir trié et catalogué avec succès plus de 100 doublons de cartes du bloc Écarlate et Violet.'
+    icon: maraisImg,
   },
   {
-    id: 'conseil_spectra',
-    name: 'Conseil 4 - Spectra (L\'Analyste)',
-    category: 'ligue',
+    id: 'volcan',
+    category: 'badges',
+    title: 'Badge Volcan',
+    description: 'Analyser et comparer les fluctuations de prix sur 30 jours de 10 cartes différentes.',
+    target: 10,
+    icon: volcanImg,
+  },
+  {
+    id: 'terre',
+    category: 'badges',
+    title: 'Badge Terre',
+    description: 'Atteindre et enregistrer 1200 cartes.',
+    target: 1200,
+    icon: terreImg,
+  },
+  {
+    id: 'conseil-olga',
+    category: 'elite4',
+    title: 'Conseil 4 - Olga',
+    description: 'Réaliser un suivi régulier des prix du marché pour optimiser ses fiches de vente.',
     target: 1,
-    metric: 'data_flux_synced',
-    description: 'Maître des Flux de Données — Assurer la synchronisation et le bon paramétrage des historiques de prix.'
+    icon: olgaImg,
   },
   {
-    id: 'conseil_aldo',
-    name: 'Conseil 4 - Aldo (Le Collectionneur Ultime)',
-    category: 'ligue',
+    id: 'conseil-aldo',
+    category: 'elite4',
+    title: 'Conseil 4 - Aldo',
+    description: 'Maître du tri de masse — Avoir trié et catalogué avec succès plus de 100 doublons de cartes du bloc Écarlate et Violet.',
+    target: 100,
+    icon: aldoImg,
+  },
+  {
+    id: 'conseil-agatha',
+    category: 'elite4',
+    title: 'Conseil 4 - Agatha',
+    description: "Maître des Flux de Données — Assurer la synchronisation et le bon paramétrage des historiques de prix.",
     target: 1,
-    metric: 'master_db_rigor',
-    description: 'Maintenir une base de données parfaitement à jour avec un suivi rigoureux Standard / Reverse sur un très large volume.'
+    icon: agathaImg,
   },
-
-  // --- MAÎTRE DE LA LIGUE ---
   {
-    id: 'maitre_kanto',
-    name: 'Maître de la Région de Kanto',
-    category: 'maitre',
-    target: 2000,
-    metric: 'total_cards',
-    description: 'L\'accomplissement suprême : décrocher tous les badges, vaincre le Conseil et franchir 2000 cartes enregistrées.'
-  }
+    id: 'conseil-peter',
+    category: 'elite4',
+    title: 'Conseil 4 - Peter',
+    description: 'Maintenir une base de données parfaitement à jour avec un suivi rigoureux Standard / Reverse sur un très large volume.',
+    target: 1,
+    icon: peterImg,
+  },
+  {
+    id: 'maitre-kanto',
+    category: 'champion',
+    title: 'Maître de la Région de Kanto',
+    description: "L'accomplissement suprême : décrocher tous les badges, vaincre le Conseil et franchir 5000 cartes enregistrées.",
+    target: 5000,
+    icon: championImg,
+  },
 ];
