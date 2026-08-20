@@ -6,6 +6,48 @@ import TCGdex from '@tcgdex/sdk';
 // Initialisation du SDK TCGdex en français
 const tcgdex = new TCGdex('fr');
 
+// Fonctions utilitaires pour les variantes dynamiques TCGdex
+const getCardVariantsList = (cardOrVariants) => {
+  let variants = [];
+  
+  const variantsData = cardOrVariants?.variants !== undefined ? cardOrVariants.variants : cardOrVariants;
+  const specialVariants = cardOrVariants?.special_variants;
+
+  if (!variantsData) {
+    variants = ['normal', 'reverse'];
+  } else if (typeof variantsData === 'object' && !Array.isArray(variantsData)) {
+    variants = Object.keys(variantsData).filter(key => variantsData[key] === true);
+  } else if (Array.isArray(variantsData)) {
+    variants = [...variantsData];
+  } else {
+    variants = ['normal'];
+  }
+
+  // Intégration dynamique des variantes spéciales (Pokéball, Masterball, etc.)
+  if (specialVariants && Array.isArray(specialVariants)) {
+    specialVariants.forEach(sv => {
+      if (!variants.includes(sv)) {
+        variants.push(sv);
+      }
+    });
+  }
+  
+  return variants;
+};
+
+const formatVariantName = (variant) => {
+  switch (variant.toLowerCase()) {
+    case 'normal': return 'Normale';
+    case 'reverse': return 'Reverse';
+    case 'holo': return 'Holo';
+    case 'masterball': return 'Master Ball';
+    case 'pokeball': return 'Poké Ball';
+    case 'cosmos': return 'Cosmos';
+    default: 
+      return variant.charAt(0).toUpperCase() + variant.slice(1).replace(/-/g, ' ');
+  }
+};
+
 export default function CreateListingModal({ isOpen, onClose, onCreated, userId, onListingCreated }) {
   const [currentUserId, setCurrentUserId] = useState(userId);
   const [mode, setMode] = useState('details'); 
@@ -184,6 +226,12 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
       };
 
       setSelectedCard(enrichedCard);
+
+      // Met à jour automatiquement la version par défaut avec la première variante disponible de la carte
+      const availableVariants = getCardVariantsList(enrichedCard);
+      if (availableVariants.length > 0) {
+        setFinish(formatVariantName(availableVariants[0]));
+      }
 
       if (enrichedCard.pricing && enrichedCard.pricing.cardmarket) {
         const cm = enrichedCard.pricing.cardmarket;
@@ -392,7 +440,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                         }}
                       />
                       <span className="absolute bottom-0 inset-x-0 bg-indigo-600 text-white text-[8px] font-bold text-center py-0.5 truncate px-1">
-                        TCGdex
+                        TCgdex
                       </span>
                       <button
                         type="button"
@@ -569,15 +617,34 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                 onChange={(e) => setFinish(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-semibold text-indigo-600"
               >
-                <option value="Normale">Normale</option>
-                <option value="Reverse">Reverse</option>
-                <option value="Cosmo">Cosmo</option>
-                <option value="Holo ligne">Holo ligne</option>
-                <option value="Holo etoile">Holo étoile</option>
-                <option value="Holo mirage">Holo mirage</option>
-                <option value="Master Ball">Master Ball</option>
-                <option value="Poké Ball">Poké Ball</option>
-                <option value="Stamp">Stamp</option>
+                {selectedCard ? (
+                  getCardVariantsList(selectedCard).map((variant) => {
+                    const variantName = formatVariantName(variant);
+                    return (
+                      <option key={variant} value={variantName}>
+                        {variantName}
+                      </option>
+                    );
+                  })
+                ) : (
+                  <>
+                    <option value="">Toutes</option>
+                    <option value="Normale">Normale</option>
+                    <option value="Reverse">Reverse</option>
+                    <option value="Cosmo">Cosmo</option>
+                    <option value="Holo ligne">Holo ligne</option>
+                    <option value="Holo étoile">Holo étoile</option>
+                    <option value="Holo mirage">Holo mirage</option>
+                    <option value="Master Ball">Master Ball</option>
+                    <option value="Poké Ball">Poké Ball</option>
+                    <option value="Copain Ball">Copain Ball</option>
+                    <option value="Love Ball">Love Ball</option>
+                    <option value="Sombre Ball">Sombre Ball</option>
+                    <option value="Rapide Ball">Rapide Ball</option>
+                    <option value="Rocket">Rocket</option>
+                    <option value="Stamp">Stamp</option>
+                  </>
+                )}
               </select>
             </div>
 

@@ -10,9 +10,11 @@ export default function Home({
   setSelectedBlock,
   selectedSeriesFilter,
   setSelectedSeriesFilter,
+  selectedIllustrator,
+  setSelectedIllustrator,
   selectedRegion,
   setSelectedRegion,
-  filterFinish,      
+  filterFinish,        
   setFilterFinish,
   filterCondition, 
   setFilterCondition,
@@ -20,6 +22,7 @@ export default function Home({
   setSelectedListing,
   blocks = [],
   seriesList = [],
+  illustratorsList = [],
   listings = [],
   favoriteListings = [],
   onToggleFavorite,
@@ -29,6 +32,23 @@ export default function Home({
 }) {
   const [isSeriesDropdownOpen, setIsSeriesDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+
+  // --- États locaux pour la saisie des filtres ---
+  const [seriesInput, setSeriesInput] = useState(selectedSeriesFilter || '');
+  const [illustratorInput, setIllustratorInput] = useState(selectedIllustrator || '');
+
+  // Synchroniser les états locaux si les props changent (ex: réinitialisation)
+  useEffect(() => {
+    setSeriesInput(selectedSeriesFilter || '');
+  }, [selectedSeriesFilter]);
+
+  useEffect(() => {
+    setIllustratorInput(selectedIllustrator || '');
+  }, [selectedIllustrator]);
+
+  // --- États pour l'autocomplétion de l'illustrateur ---
+  const [isIllustratorDropdownOpen, setIsIllustratorDropdownOpen] = useState(false);
+  const illustratorDropdownRef = useRef(null);
 
   // --- États pour l'autocomplétion de la recherche principale ---
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
@@ -90,6 +110,9 @@ export default function Home({
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsSeriesDropdownOpen(false);
       }
+      if (illustratorDropdownRef.current && !illustratorDropdownRef.current.contains(event.target)) {
+        setIsIllustratorDropdownOpen(false);
+      }
       if (searchDropdownRef.current && !searchDropdownRef.current.contains(event.target)) {
         setIsSearchDropdownOpen(false);
       }
@@ -98,22 +121,44 @@ export default function Home({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filtrer les séries selon le bloc sélectionné ET ce qui est tapé dans l'input
+  // Filtrer les séries selon le bloc sélectionné ET ce qui est tapé dans l'input local
   const filteredSeriesOptions = seriesList.filter(series => {
+    if (!series) return false;
     const sName = typeof series === 'string' ? series : series.name;
     const sBlock = typeof series === 'string' ? null : series.block;
 
+    if (!sName) return false;
+
     const matchesBlock = !selectedBlock || (sBlock === selectedBlock);
-    const matchesInput = sName.toLowerCase().includes(selectedSeriesFilter.toLowerCase());
+    const matchesInput = sName.toLowerCase().includes(seriesInput.toLowerCase());
     
     return matchesBlock && matchesInput;
   });
 
+  // --- Extraction automatique et combinée des illustrateurs ---
+  const dynamicIllustrators = [...new Set(
+    listings.map(item => {
+      const cardData = Array.isArray(item.cards) ? item.cards[0] : item.cards;
+      return cardData?.illustrator || item.illustrator;
+    }).filter(Boolean)
+  )];
+
+  const allIllustratorsSource = illustratorsList.length > 0 
+    ? [...new Set([...illustratorsList, ...dynamicIllustrators])]
+    : dynamicIllustrators;
+
+  // Filtrer les illustrateurs selon ce qui est tapé dans l'input local
+  const filteredIllustratorOptions = allIllustratorsSource.filter(illustrator => {
+    if (!illustrator) return false;
+    const illName = typeof illustrator === 'string' ? illustrator : illustrator.name;
+    return illName && illName.toLowerCase().includes(illustratorInput.toLowerCase());
+  });
+
   // --- Générer les suggestions dynamiques pour la recherche textuelle ---
-  const searchSuggestions = searchQuery.trim().length > 0 ? [...new Set(
+  const searchSuggestions = (searchQuery || '').trim().length > 0 ? [...new Set(
     listings
       .map(item => item.cards?.name || item.title || '')
-      .filter(name => name.toLowerCase().includes(searchQuery.toLowerCase()))
+      .filter(name => name && name.toLowerCase().includes((searchQuery || '').toLowerCase()))
   )].slice(0, 6) : [];
 
   return (
@@ -142,7 +187,7 @@ export default function Home({
 
         {/* Conteneur de la slide active */}
         <div className={`relative overflow-hidden bg-gradient-to-r ${slide.gradient} rounded-2xl p-8 md:p-12 text-white shadow-sm border border-slate-700/60 transition-all duration-500`}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.15),transparent_50%)]"></div>          
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.15),transparent_50%)]"></div>         
           <div className="relative z-10 max-w-2xl space-y-4">
             <span className="inline-block bg-[#16181d]/60 text-purple-400 font-bold text-xs uppercase tracking-widest px-3 py-1 rounded-full border border-slate-700/60 backdrop-blur-sm">
               {slide.tag}
@@ -193,7 +238,7 @@ export default function Home({
             type="text"
             placeholder="Rechercher une carte, un Pokémon..."
             value={searchQuery}
-            onFocus={() => { if (searchQuery.trim().length > 0) setIsSearchDropdownOpen(true); }}
+            onFocus={() => { if ((searchQuery || '').trim().length > 0) setIsSearchDropdownOpen(true); }}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               setIsSearchDropdownOpen(true);
@@ -219,7 +264,7 @@ export default function Home({
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Bloc */}
           <div>
             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bloc</label>
@@ -228,8 +273,9 @@ export default function Home({
               onChange={(e) => {
                 setSelectedBlock(e.target.value);
                 setSelectedSeriesFilter('');
+                setSeriesInput('');
               }}
-              className="w-48 bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="w-full bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
               <option value="">Tous les blocs</option>
               {blocks.map((block, index) => (
@@ -246,19 +292,21 @@ export default function Home({
             <input
               type="text"
               placeholder="Taper pour chercher une série..."
-              value={selectedSeriesFilter}
+              value={seriesInput}
               onFocus={() => setIsSeriesDropdownOpen(true)}
               onChange={(e) => {
+                setSeriesInput(e.target.value);
                 setSelectedSeriesFilter(e.target.value);
                 setIsSeriesDropdownOpen(true);
               }}
-              className="w-48 bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="w-full bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             />
 
             {isSeriesDropdownOpen && (
               <div className="absolute z-50 left-0 right-0 mt-1 bg-[#1e222b] border border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto">
                 <div
                   onClick={() => {
+                    setSeriesInput('');
                     setSelectedSeriesFilter('');
                     setIsSeriesDropdownOpen(false);
                   }}
@@ -275,6 +323,7 @@ export default function Home({
                       <div
                         key={index}
                         onClick={() => {
+                          setSeriesInput(sName);
                           setSelectedSeriesFilter(sName);
                           setIsSeriesDropdownOpen(false);
                         }}
@@ -289,13 +338,65 @@ export default function Home({
             )}
           </div>
 
+          {/* Illustrateur avec Recherche / Autocomplete */}
+          <div className="relative" ref={illustratorDropdownRef}>
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Illustrateur</label>
+            <input
+              type="text"
+              placeholder="Taper un illustrateur..."
+              value={illustratorInput}
+              onFocus={() => setIsIllustratorDropdownOpen(true)}
+              onChange={(e) => {
+                setIllustratorInput(e.target.value);
+                setSelectedIllustrator(e.target.value);
+                setIsIllustratorDropdownOpen(true);
+              }}
+              className="w-full bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            />
+
+            {isIllustratorDropdownOpen && (
+              <div className="absolute z-50 left-0 right-0 mt-1 bg-[#1e222b] border border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                <div
+                  onClick={() => {
+                    setIllustratorInput('');
+                    setSelectedIllustrator('');
+                    setIsIllustratorDropdownOpen(false);
+                  }}
+                  className="px-4 py-2.5 text-xs text-emerald-400 font-bold hover:bg-slate-800 cursor-pointer border-b border-slate-800"
+                >
+                  Tous les illustrateurs
+                </div>
+                {filteredIllustratorOptions.length === 0 ? (
+                  <div className="px-4 py-3 text-xs text-slate-400 text-center">Aucun illustrateur trouvé</div>
+                ) : (
+                  filteredIllustratorOptions.map((illustrator, index) => {
+                    const illName = typeof illustrator === 'string' ? illustrator : illustrator.name;
+                    return (
+                      <div
+                        key={index}
+                        onClick={() => {
+                          setIllustratorInput(illName);
+                          setSelectedIllustrator(illName);
+                          setIsIllustratorDropdownOpen(false);
+                        }}
+                        className="px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-emerald-400 cursor-pointer font-medium"
+                      >
+                        {illName}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Département groupé par Région */}
           <div>
             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Département</label>
             <select
               value={selectedRegion}
               onChange={(e) => setSelectedRegion(e.target.value)}
-              className="w-48 bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
+              className="w-full bg-[#16181d] border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
               <option value="">Tous les départements</option>
               
@@ -465,6 +566,11 @@ export default function Home({
               <option value="Holo mirage">Holo mirage</option>
               <option value="Master Ball">Master Ball</option>
               <option value="Poké Ball">Poké Ball</option>
+              <option value="Copain Ball">Copain Ball</option>
+              <option value="Love Ball">Love Ball</option>
+              <option value="Sombre Ball">Sombre Ball</option>
+              <option value="Rapide Ball">Rapide Ball</option>
+              <option value="Rocket">Rocket</option>
               <option value="Stamp">Stamp</option>
             </select>
           </div>
@@ -500,6 +606,7 @@ export default function Home({
           <span className="text-xs font-bold bg-slate-800 text-emerald-400 border border-slate-700 px-3 py-1 rounded-full">
             {filteredListings.length} {filteredListings.length > 1 ? 'annonces' : 'annonce'}
           </span>
+
         </div>
 
         {filteredListings.length === 0 ? (
@@ -510,8 +617,12 @@ export default function Home({
                 setSearchQuery(''); 
                 setSelectedBlock('');
                 setSelectedSeriesFilter('');
+                setSeriesInput('');
+                setSelectedIllustrator('');
+                setIllustratorInput('');
                 setSelectedRegion('');
                 setFilterFinish('');
+                setFilterCondition('');
               }}
               className="inline-block bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer"
             >

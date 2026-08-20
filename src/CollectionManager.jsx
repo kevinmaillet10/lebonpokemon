@@ -43,7 +43,7 @@ export default function CollectionManager({ user, onBack }) {
         for (const serie of seriesData) {
           const { data: serieCards } = await supabase
             .from('cards')
-            .select('id, variants')
+            .select('id, variants, special_variants')
             .eq('set_id', serie.id);
 
           const totalCardsInSet = serieCards ? serieCards.length : 0;
@@ -51,7 +51,7 @@ export default function CollectionManager({ user, onBack }) {
           let ownedCount = 0;
           if (serieCards) {
             serieCards.forEach(card => {
-              const cardVariants = getCardVariantsList(card.variants);
+              const cardVariants = getCardVariantsList(card);
               const hasOneOwned = cardVariants.some(v => userCollMap[`${card.id}_${v}`]);
               if (hasOneOwned) {
                 ownedCount++;
@@ -74,18 +74,33 @@ export default function CollectionManager({ user, onBack }) {
     fetchData();
   }, [user]);
 
-  const getCardVariantsList = (variantsData) => {
-    if (!variantsData) return ['normal', 'reverse'];
+  const getCardVariantsList = (cardOrVariants) => {
+    let variants = [];
     
-    if (typeof variantsData === 'object' && !Array.isArray(variantsData)) {
-      return Object.keys(variantsData).filter(key => variantsData[key] === true);
+    // Supporte soit l'objet carte complet, soit directement les données de variantes (rétrocompatibilité)
+    const variantsData = cardOrVariants?.variants !== undefined ? cardOrVariants.variants : cardOrVariants;
+    const specialVariants = cardOrVariants?.special_variants;
+
+    if (!variantsData) {
+      variants = ['normal', 'reverse'];
+    } else if (typeof variantsData === 'object' && !Array.isArray(variantsData)) {
+      variants = Object.keys(variantsData).filter(key => variantsData[key] === true);
+    } else if (Array.isArray(variantsData)) {
+      variants = [...variantsData];
+    } else {
+      variants = ['normal'];
+    }
+
+    // Ajout dynamique des variantes spéciales (special_variants)
+    if (specialVariants && Array.isArray(specialVariants)) {
+      specialVariants.forEach(sv => {
+        if (!variants.includes(sv)) {
+          variants.push(sv);
+        }
+      });
     }
     
-    if (Array.isArray(variantsData)) {
-      return variantsData;
-    }
-    
-    return ['normal'];
+    return variants;
   };
 
   // 2. Charger les cartes de la série sélectionnée
@@ -140,7 +155,7 @@ export default function CollectionManager({ user, onBack }) {
 
       let ownedCount = 0;
       serieCards.forEach(c => {
-        const cVariants = getCardVariantsList(c.variants);
+        const cVariants = getCardVariantsList(c);
         const hasOneOwned = cVariants.some(v => updatedCollMap[`${c.id}_${v}`]);
         if (hasOneOwned) {
           ownedCount++;
@@ -185,7 +200,7 @@ export default function CollectionManager({ user, onBack }) {
 
   const renderableCards = [];
   cards.forEach(card => {
-    const cardVariants = getCardVariantsList(card.variants);
+    const cardVariants = getCardVariantsList(card);
     cardVariants.forEach(variant => {
       renderableCards.push({ ...card, displayVariant: variant });
     });
@@ -207,7 +222,8 @@ export default function CollectionManager({ user, onBack }) {
   });
 
   const getVariantBadgeStyle = (variant) => {
-    switch (variant.toLowerCase()) {
+    const lower = variant.toLowerCase();
+    switch (lower) {
       case 'reverse':
         return { label: 'Reverse', bg: 'bg-amber-500 text-slate-950' };
       case 'holo':
@@ -218,8 +234,10 @@ export default function CollectionManager({ user, onBack }) {
         return { label: 'Holo Cosmos', bg: 'bg-blue-600 text-white' };
       case 'nonholo':
       case 'normal':
-      default:
         return { label: 'Standard', bg: 'bg-red-600 text-white' };
+      default:
+        // S'adapte automatiquement pour les variantes spéciales (Pokéball, Masterball, etc.)
+        return { label: variant, bg: 'bg-emerald-600 text-white' };
     }
   };
 
@@ -328,6 +346,7 @@ export default function CollectionManager({ user, onBack }) {
           <span className="text-sm font-extrabold text-purple-400">
             {selectedSeries?.name} ({filteredCards.length} déclinaisons affichées)
           </span>
+
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto">

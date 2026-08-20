@@ -47,6 +47,8 @@ import ConditionGuideView from './ConditionGuideView';
 import PokedexView from './PokedexView';
 import { leagueSteps } from './constants/kantoLeague';
 import { leagueSteps as baseLeagueSteps } from './constants/kantoLeague';
+import { Capacitor } from '@capacitor/core';
+import WhosThatPokemon from './components/WhosThatPokemon';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(() => {
@@ -64,10 +66,13 @@ export default function App() {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [unlockedBadgeModal, setUnlockedBadgeModal] = useState(null);
+  const [selectedIllustrator, setSelectedIllustrator] = useState('');
+  const [isMinigameOpen, setIsMinigameOpen] = useState(false);
   
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showMfaSetupModal, setShowMfaSetupModal] = useState(false);
   const [mfaUser, setMfaUser] = useState(null);
   
@@ -83,6 +88,7 @@ export default function App() {
   const [totalCards, setTotalCards] = useState(0);
   const [totalCardsCount, setTotalCardsCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [selectedSellerId, setSelectedSellerId] = useState(null);
 
       // --- AJOUT POUR LE TUTORIEL ---
       useEffect(() => {
@@ -614,8 +620,10 @@ export default function App() {
         .select(`
           *,
           profiles:user_id (*),
-          cards (
+          cards:tcgdex_card_id (
             *,
+            illustrator, 
+            types,
             extensions:set_id (*)
           )
         `)
@@ -832,6 +840,12 @@ export default function App() {
         seriesName.toLowerCase().includes(selectedSeriesFilter.toLowerCase()) ||
         (item.extension_id && item.extension_id.toLowerCase().includes(selectedSeriesFilter.toLowerCase()));
 
+      // 3.5. Filtre Illustrateur (Ajouté ici)
+      const cardData = Array.isArray(item.cards) ? item.cards[0] : item.cards;
+      const itemIllustrator = cardData?.illustrator || item.illustrator || '';
+      const matchesIllustrator = !selectedIllustrator || 
+        itemIllustrator.toLowerCase().includes(selectedIllustrator.toLowerCase());
+
       // 4. Filtre Département
       const matchesDept = !selectedRegion || 
         item.profiles?.department_code === selectedRegion || 
@@ -851,10 +865,10 @@ export default function App() {
       const selectedCond = (filterCondition || '').trim().toLowerCase();
       const matchesCondition = !filterCondition || (itemCond !== '' && itemCond === selectedCond);
 
-      return matchesSearch && matchesBlock && matchesSeries && matchesDept && matchesFinish && matchesCondition;
+      return matchesSearch && matchesBlock && matchesSeries && matchesIllustrator && matchesDept && matchesFinish && matchesCondition;
     });
-  }, [listings, searchQuery, selectedBlock, selectedSeriesFilter, selectedRegion, filterFinish, filterCondition, seriesList]);
-  
+  }, [listings, searchQuery, selectedBlock, selectedSeriesFilter, selectedIllustrator, selectedRegion, filterFinish, filterCondition, seriesList]);
+
   useEffect(() => {
     async function fetchFavorites() {
       if (!user) {
@@ -929,7 +943,8 @@ export default function App() {
   }, [user, listings]);
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-800 relative bg-slate-900" onClick={() => isUserMenuOpen && setIsUserMenuOpen(false)}>
+    <div className="min-h-screen bg-slate-100 font-sans text-slate-800 relative bg-slate-900 pt-8 md:pt-0" onClick={() => isUserMenuOpen && setIsUserMenuOpen(false)}>
+      
       {/* 1. L'animation de bienvenue se place en tout premier par-dessus tout */}
       {showSplash && (
         <WelcomeSplash onFinish={handleSplashFinish} />
@@ -942,6 +957,225 @@ export default function App() {
       </div>
 
       {/* HEADER */}
+      {Capacitor.isNativePlatform() ? (
+        /* --- VERSION MOBILE (Menu Burger Complet & Synchronisé) --- */
+        <header className="bg-slate-900 text-white py-3 px-4 border-b border-slate-800 flex justify-between items-center relative z-50">
+          {/* Logo sur Mobile */}
+          <div 
+            onClick={() => { setCurrentView('home'); setSelectedSeries(null); setIsMobileMenuOpen(false); }}
+            className="font-bold text-lg cursor-pointer flex items-center gap-2"
+          >
+            <span>Le Bon Pokémon</span>
+          </div>
+
+          {/* Actions rapides à droite sur mobile (Notifs, Panier, Burger) */}
+          <div className="flex items-center gap-2">
+            {user && <NotificationBell currentUserId={user.id} onOpenConversation={handleOpenInboxWithConversation} />}
+
+            <button
+              onClick={() => { setCurrentView('cart'); setIsMobileMenuOpen(false); }}
+              className="relative bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold p-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center justify-center border border-slate-700"
+            >
+              <span>🛒</span>
+              {totalCartItemsCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-indigo-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-black">
+                  {totalCartItemsCount}
+                </span>
+              )}
+            </button>
+
+            <button 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 text-2xl text-white focus:outline-none cursor-pointer"
+            >
+              {isMobileMenuOpen ? '✕' : '☰'}
+            </button>
+          </div>
+
+          {/* Menu déroulant vertical complet quand on clique sur ☰ */}
+          {isMobileMenuOpen && (
+            <div className="absolute top-full left-0 w-full bg-slate-900 border-b border-slate-800 flex flex-col p-4 gap-3 shadow-2xl z-50 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              
+              {/* Navigation principale mobile */}
+              <div className="flex flex-col gap-2 pb-3 border-b border-slate-800">
+                <button 
+                  onClick={() => { setCurrentView('home'); setSelectedSeries(null); setIsMobileMenuOpen(false); }}
+                  className="text-left py-2.5 px-4 bg-slate-800 rounded-xl font-medium text-slate-200 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <span>🏠</span> Accueil
+                </button>
+                <button 
+                  onClick={() => { setCurrentView('optimizer'); setIsMobileMenuOpen(false); }}
+                  className="text-left py-2.5 px-4 bg-slate-800 rounded-xl font-medium text-slate-200 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <span>🎯</span> Optimiser mes achats
+                </button>
+                <button 
+                  onClick={() => { setCurrentView('pokedex'); setIsMobileMenuOpen(false); }}
+                  className="text-left py-2.5 px-4 bg-slate-800 rounded-xl font-medium text-slate-200 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <span>📖</span> Pokédex
+                </button>
+                <button 
+                  onClick={() => { setCurrentView('my-collection'); setIsMobileMenuOpen(false); }}
+                  className="text-left py-2.5 px-4 bg-slate-800 rounded-xl font-medium text-slate-200 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <span>📚</span> Ma collection
+                </button>
+
+                {user && (
+                  <>
+                    <button 
+                      onClick={() => { openMassListingSelector(); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-white flex items-center gap-2.5 cursor-pointer"
+                    >
+                      <span>⚡</span> Ajout en masse
+                    </button>
+                    <button 
+                      onClick={() => { setIsCreateOpen(true); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white flex items-center gap-2.5 cursor-pointer"
+                    >
+                      <span>+</span> Vendre à l'unité
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Partie Mon Compte / Profil mobile synchronisée */}
+              <div className="flex flex-col gap-2 pt-1">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">Mon Compte</p>
+                {user ? (
+                  <>
+                    {/* En-tête profil mobile avec le style badge RPG */}
+                    <div className="flex items-center gap-3 px-3 py-2.5 bg-slate-800/50 rounded-xl border border-slate-700/50">
+                      {(() => {
+                        const currentCount = typeof totalCardsCount !== 'undefined' ? totalCardsCount : (userListings?.length || 0);
+                        const previousMax = parseInt(localStorage.getItem('max_cards_reached') || '0', 10);
+                        const effectiveCardsCount = Math.max(currentCount, previousMax);
+                        if (effectiveCardsCount > previousMax) {
+                          localStorage.setItem('max_cards_reached', effectiveCardsCount.toString());
+                        }
+
+                        const leagueSteps = [
+                          { id: 'roche', target: 20, current: Math.min(effectiveCardsCount, 20), icon: rocheImg },
+                          { id: 'cascade', target: 200, current: Math.min(effectiveCardsCount, 200), icon: cascadeImg },
+                          { id: 'foudre', target: 1, current: 0, icon: foudreImg },
+                          { id: 'prisme', target: 1, current: 0, icon: prismeImg },
+                          { id: 'ame', target: 700, current: Math.min(effectiveCardsCount, 700), icon: ameImg },
+                          { id: 'marais', target: 100, current: 0, icon: maraisImg },
+                          { id: 'volcan', target: 10, current: 0, icon: volcanImg },
+                          { id: 'terre', target: 1200, current: Math.min(effectiveCardsCount, 1200), icon: terreImg },
+                          { id: 'conseil-olga', target: 1, current: 0, icon: olgaImg },
+                          { id: 'conseil-aldo', target: 100, current: 0, icon: aldoImg },
+                          { id: 'conseil-agatha', target: 1, current: 0, icon: agathaImg },
+                          { id: 'conseil-peter', target: 1, current: 0, icon: peterImg },
+                          { id: 'maitre-kanto', target: 5000, current: Math.min(effectiveCardsCount, 5000), icon: championImg },
+                        ];
+
+                        const unlockedSteps = leagueSteps.filter(step => step.current >= step.target);
+                        const hasUnlockedAny = unlockedSteps.length > 0;
+                        const highestBadge = hasUnlockedAny ? unlockedSteps[unlockedSteps.length - 1] : null;
+
+                        return (
+                          <div className="relative inline-block shrink-0">
+                            <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center overflow-hidden font-bold text-white">
+                              {profile?.avatar_url ? (
+                                <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-xs">
+                                  {profile?.username ? profile.username[0].toUpperCase() : user.email[0].toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className={`absolute inset-0 rounded-full border-2 pointer-events-none transition-all ${
+                              hasUnlockedAny ? 'border-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]' : 'border-slate-600 opacity-50'
+                            }`}></div>
+
+                            {highestBadge && (
+                              <div className="absolute -bottom-1 -right-1 bg-slate-900 text-white w-5 h-5 rounded-full border border-slate-700 shadow-sm flex items-center justify-center overflow-hidden p-0.5">
+                                <img src={highestBadge.icon} alt="Badge" className="w-full h-full object-contain drop-shadow" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      <div className="flex flex-col truncate">
+                        <span className="text-xs font-bold text-white truncate">{profile?.username || 'Mon Compte'}</span>
+                        <span className="text-[10px] text-slate-400 truncate">{user.email}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => { setCurrentView('settings'); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2 cursor-pointer"
+                    >
+                      ⚙️ Paramètres du profil
+                    </button>
+                    <button
+                      onClick={() => { setCurrentView('favorites'); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2 cursor-pointer"
+                    >
+                      ❤️ Mes favoris
+                    </button>
+                    <button
+                      onClick={() => { setCurrentView('purchases'); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2 cursor-pointer"
+                    >
+                      🛍️ Mes achats
+                    </button>
+                    <button
+                      onClick={() => { setCurrentView('league'); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2 px-3 text-xs font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg flex items-center gap-2 cursor-pointer"
+                    >
+                      ⚡ Ligue Pokémon (Kanto)
+                    </button>
+                    <button
+                      onClick={() => { setCurrentView('account'); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2 cursor-pointer"
+                    >
+                      📦 Mes annonces ({userListings.length})
+                    </button>
+                    <button
+                      onClick={() => { setCurrentView('inbox'); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2 cursor-pointer"
+                    >
+                      💬 Messagerie
+                    </button>
+
+                    <button 
+                      onClick={() => window.open('https://docs.google.com/forms/d/e/1FAIpQLSc3ReFe89UxRat7-0oStUYtN2BaI0EW7tWaR9hsJiYeQbzPgQ/viewform', '_blank')}
+                      className="w-full text-left px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg flex items-center gap-2 transition-colors my-1 cursor-pointer shadow-sm text-xs justify-center"
+                    >
+                      <span>📢</span> DONNEZ VOTRE AVIS
+                    </button>
+
+                    <div className="border-t border-slate-800 my-1"></div>
+
+                    <button
+                      onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
+                      className="text-left py-2 px-3 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 rounded-lg flex items-center gap-2 cursor-pointer"
+                    >
+                      🚪 Déconnexion
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { setIsAuthOpen(true); setIsMobileMenuOpen(false); }}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 px-4 rounded-xl font-bold text-xs transition-colors text-center shadow-sm cursor-pointer"
+                  >
+                    Se connecter
+                  </button>
+                )}
+              </div>
+
+            </div>
+          )}
+        </header>
+      ) : (
+
+      /* --- VERSION SITE WEB PC (Ton header d'origine) --- */
       <header className="bg-slate-900 text-white py-4 px-6 shadow-md border-b border-slate-800 sticky top-0 z-40">
         <div className="w-full flex justify-between items-center">
 
@@ -992,6 +1226,38 @@ export default function App() {
               </p>
             </div>
           </div>
+
+          {/* --- TA NAVBAR --- */}
+          <nav className="flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800">
+            {/* Ton logo / liens à gauche ... */}
+            
+            {/* Le bouton Mini-jeu dans la Navbar */}
+            <button 
+              onClick={() => setIsMinigameOpen(true)}
+              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-6 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-lg"
+            >
+              <span>⚡</span>
+              <span>Minijeu</span>
+              <span>⚡</span>
+            </button>
+
+            {/* Autres boutons à droite ... */}
+          </nav>
+
+          {/* --- LE RESTE DE TA PAGE --- */}
+          <main>
+            {/* Tes grilles, routes, etc. */}
+          </main>
+
+          {/* --- LA MODALE DU MINI-JEU --- */}
+          <WhosThatPokemon
+            isOpen={isMinigameOpen}
+            onClose={() => setIsMinigameOpen(false)}
+            onSelectProfile={(userId) => {
+              setIsMinigameOpen(false);       // Ferme le mini-jeu
+              setSelectedSellerId(userId);    // Ouvre la modale UserStoreModal avec l'ID du vendeur
+            }}
+          />
 
           <div className="flex items-center gap-3">
             {/* BOUTON NOTIFICATIONS CONNECTÉ */}
@@ -1060,17 +1326,13 @@ export default function App() {
                   >
                     {/* --- AVATAR AVEC CADRE RPG & BADGE DYNAMIQUE --- */}
                     {(() => {
-                      // 1. Récupère le nombre de cartes en toute sécurité (via le state ou la longueur de la liste)
                       const currentCount = typeof totalCardsCount !== 'undefined' ? totalCardsCount : (userListings?.length || 0);
-
-                      // 2. Mémorise le record max de cartes atteint (pour que le badge reste acquis à vie)
                       const previousMax = parseInt(localStorage.getItem('max_cards_reached') || '0', 10);
                       const effectiveCardsCount = Math.max(currentCount, previousMax);
                       if (effectiveCardsCount > previousMax) {
                         localStorage.setItem('max_cards_reached', effectiveCardsCount.toString());
                       }
 
-                      // 3. Liste de tous les paliers de Kanto (utilise effectiveCardsCount)
                       const leagueSteps = [
                         { id: 'roche', target: 20, current: Math.min(effectiveCardsCount, 20), icon: rocheImg },
                         { id: 'cascade', target: 200, current: Math.min(effectiveCardsCount, 200), icon: cascadeImg },
@@ -1087,11 +1349,8 @@ export default function App() {
                         { id: 'maitre-kanto', target: 5000, current: Math.min(effectiveCardsCount, 5000), icon: championImg },
                       ];
 
-                      // Récupère uniquement les badges débloqués
                       const unlockedSteps = leagueSteps.filter(step => step.current >= step.target);
                       const hasUnlockedAny = unlockedSteps.length > 0;
-                      
-                      // Prend le dernier badge débloqué (le plus haut gradé)
                       const highestBadge = hasUnlockedAny ? unlockedSteps[unlockedSteps.length - 1] : null;
 
                       return (
@@ -1106,14 +1365,12 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* Cadre lumineux style RPG (vert émeraude si au moins un badge est débloqué) */}
                           <div className={`absolute inset-0 rounded-full border-2 pointer-events-none transition-all ${
                             hasUnlockedAny 
                               ? 'border-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]' 
                               : 'border-slate-600 opacity-50'
                           }`}></div>
 
-                          {/* Affiche le vrai badge dans le coin s'il y en a un de débloqué */}
                           {highestBadge && (
                             <div className="absolute -bottom-1 -right-1 bg-slate-900 text-white w-7 h-7 rounded-full border border-slate-700 shadow-sm flex items-center justify-center overflow-hidden p-0.5">
                               <img src={highestBadge.icon} alt="Badge" className="w-full h-full object-contain drop-shadow" />
@@ -1122,7 +1379,6 @@ export default function App() {
                         </div>
                       );
                     })()}
-                    {/* ----------------------------------------------------------- */}
 
                     <span className="text-xs font-semibold text-slate-200">
                       {profile.username || 'Mon Compte'}
@@ -1136,7 +1392,6 @@ export default function App() {
                         <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
                       </div>
                       
-                      {/* Bouton Paramètres (Formulaire d'adresse, téléphone...) */}
                       <button
                         onClick={() => { setCurrentView('settings'); setIsUserMenuOpen(false); }}
                         className="w-full text-left px-4 py-2.5 text-xs font-medium hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2"
@@ -1144,7 +1399,6 @@ export default function App() {
                         ⚙️ Paramètres du profil
                       </button>
 
-                      {/* Mes favoris */}
                       <button
                         onClick={() => {
                           setCurrentView('favorites');
@@ -1153,10 +1407,8 @@ export default function App() {
                         className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2"
                       >
                         ❤️ Mes favoris
-
                       </button>
 
-                      {/* Mes achats */}
                       <button
                         onClick={() => {
                           setCurrentView('purchases');
@@ -1167,7 +1419,6 @@ export default function App() {
                         🛍️ Mes achats
                       </button>
 
-                      {/* NOUVEAU BOUTON : Ligue Pokémon (Kanto) en vue dédiée */}
                       <button
                         onClick={() => { setCurrentView('league'); setIsUserMenuOpen(false); }}
                         className="w-full text-left px-4 py-2.5 text-xs font-medium text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer flex items-center gap-2 font-bold"
@@ -1219,10 +1470,44 @@ export default function App() {
           </div>
         </div>
       </header>
+    )}
+
+       
 
       {/* ================= CONTENEUR GLOBAL DES 3 COLONNES ================= */}
       <div className="relative bg-slate-900 max-w-[1920px] mx-auto flex justify-between px-4 flex-grow">
+        {currentView === 'cart' && (
+            <div className="max-w-4xl mx-auto space-y-6">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <span>🛒</span> Mon Panier multi-vendeurs
+                </h2>
+                <button
+                  onClick={() => setCurrentView('home')}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                >
+                  ← Continuer mes achats
+                </button>
+              </div>
 
+              {Object.keys(cart).length === 0 ? (
+                <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
+                  <p className="text-4xl mb-3">🛒</p>
+                  <p className="text-slate-600 font-medium text-sm">Votre panier est vide pour le moment.</p>
+                  <button
+                    onClick={() => setCurrentView('home')}
+                    className="mt-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-colors shadow-sm cursor-pointer"
+                  >
+                    Découvrir les annonces
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Le reste de ton code panier continue ici normalement */}
+                </div>
+              )}
+            </div>
+          )}
         {/* 1. BANNIÈRE GAUCHE (Fixée au bord tout à gauche de l'écran) */}
         <div className="hidden 2xl:block fixed left-0 top-[110px] w-[650px] h-[calc(100vh-110px)] z-0 pointer-events-none">
           <img 
@@ -1235,13 +1520,7 @@ export default function App() {
 
       {/* ================= CONTENU CENTRAL ================= */}
       <main className="w-full xl:ml-[310px] xl:mr-[310px] xl:max-w-[calc(100%-620px)] mx-auto px-4 py-6 z-10 relative">
-        {currentView === 'inbox' ? (
-          <InboxView
-            currentUserId={user?.id}
-            activeConversationId={activeConversationId}
-            onBack={() => setCurrentView('home')}
-          />
-        ) : currentView === 'cart' ? (
+        {currentView === 'cart' ? (
           <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
@@ -1532,6 +1811,7 @@ export default function App() {
               </div>
             )}
           </div>
+
         ) : currentView === 'league' ? (
           <KantoLeagueTab totalCards={totalCards} user={user} />
         ) : currentView === 'series-select' && !selectedSeries ? (
@@ -1612,6 +1892,7 @@ export default function App() {
               })
             )}
           </div>
+        
         ) : selectedSeries ? (
           <MassListing 
             selectedSeries={selectedSeries} 
@@ -1857,6 +2138,7 @@ export default function App() {
               )}
             </div>
           </div>
+          
         ) : ( 
           <main className="w-full p-6 space-y-6">
             {/* 1. Vue Accueil (Home) */}
@@ -1885,6 +2167,16 @@ export default function App() {
                 onAddToCart={addToCart}
                 onOpenCreateSingleListing={setIsCreateOpen}
                 currentUserId={user?.id}
+                selectedIllustrator={selectedIllustrator}
+                setSelectedIllustrator={setSelectedIllustrator}
+              />
+            )}
+
+            {currentView === 'inbox' && (
+              <InboxView
+                currentUserId={user?.id}
+                activeConversationId={activeConversationId}
+                onBack={() => setCurrentView('home')}
               />
             )}
 
@@ -1988,6 +2280,14 @@ export default function App() {
           isOpen={isAuthOpen} 
           onClose={() => setIsAuthOpen(false)} 
           onSuccess={handleLoginSuccess} 
+        />
+      )}
+
+      {selectedSellerId && (
+        <UserStoreModal
+          sellerId={selectedSellerId}
+          onClose={() => setSelectedSellerId(null)}
+          onSelectListing={(listing) => setSelectedListing(listing)}
         />
       )}
       

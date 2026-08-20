@@ -7,8 +7,6 @@ import ReportModal from './ReportModal';
 
 export default function CardDetailModal({ listing, onClose, onOpenInboxWithConversation, onAddToCart, currentUserId, favoriteSellers, toggleFavoriteSeller }) { 
   if (!listing || !listing.id) return null;
-  console.log("DONNÉES DE L'ANNONCE (LISTING) :", listing); //
-  console.log("🔍 DEBUG CARTE & ANNONCE :");
   
   const [showStoreModal, setShowStoreModal] = useState(false);
   const [isStartingChat, setIsStartingChat] = useState(false);
@@ -33,6 +31,15 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
   const cardName = listing?.cards?.name || listing?.title || 'Carte sans nom';
   const cardNumber = listing?.cards?.card_number || listing?.card_number;
   const cardExtension = listing?.cards?.set_code || listing?.cards?.series || '';
+  const cardData = Array.isArray(listing?.cards) ? listing.cards[0] : listing?.cards;
+  // Récupération de l'illustrateur
+  const illustrator = cardData?.illustrator;
+
+  // Gestion propre du tableau de types (ex: ['Obscurité'] -> "Obscurité")
+  const rawTypes = cardData?.types;
+  const cardTypes = Array.isArray(rawTypes) 
+    ? rawTypes.join(', ') 
+    : (rawTypes ? String(rawTypes) : '');
 
   useEffect(() => {
     async function fetchCardMarketData() {
@@ -434,6 +441,21 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
                   ✕
                 </button>
               </div>
+
+              {(illustrator || cardTypes) && (
+                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 mt-3 pt-3 border-t border-slate-700/50">
+                  {illustrator && (
+                    <div>
+                      <span className="font-semibold text-slate-500">Illustrateur :</span> {illustrator}
+                    </div>
+                  )}
+                  {cardTypes && (
+                    <div>
+                      <span className="font-semibold text-slate-500">Type :</span> <span className="font-medium text-indigo-400">{cardTypes}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <SecurityBanner />
 

@@ -6,12 +6,11 @@ export default function SingleListing({
   onAddToCart, 
   isFavorite = false, 
   onToggleFavorite,
-  currentUserId // <-- Réception de la prop pour identifier l'utilisateur connecté
+  currentUserId 
 }) {
   if (!listing) return null;
 
   // Détermine si l'annonce appartient à l'utilisateur connecté
-  // (Adaptez 'user_id' ou 'seller_id' selon la structure exacte de votre table Supabase)
   const isOwnListing = currentUserId && (listing.user_id === currentUserId || listing.seller_id === currentUserId);
 
   // Extraction et parsing ultra-robuste des images (gère le string JSON de Supabase)
@@ -37,6 +36,12 @@ export default function SingleListing({
   const cardImage = rawImage;
   const cardName = listing.title || listing.cards?.name || listing.card_name;
   const seller = listing.profiles;
+
+  const cardData = Array.isArray(listing.cards) ? listing.cards[0] : listing.cards;
+  // Extraction de l'illustrateur et des types (depuis listing ou cards)
+  const illustrator = listing.illustrator || cardData?.illustrator;
+  const rawTypes = listing.types || cardData?.types || [];
+  const cardTypes = Array.isArray(rawTypes) ? rawTypes.join(', ') : rawTypes;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/85 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between group relative">
@@ -113,6 +118,22 @@ export default function SingleListing({
             <p className="text-[11px] text-slate-400 font-medium mt-0.5">
               Par {seller?.username || 'Vendeur'}
             </p>
+
+            {/* Affichage de l'illustrateur et du type */}
+            {(illustrator || cardTypes) && (
+              <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 space-y-0.5">
+                {illustrator && (
+                  <div className="truncate">
+                    <span className="font-semibold text-slate-400">Illus :</span> {illustrator}
+                  </div>
+                )}
+                {cardTypes && (
+                  <div className="truncate">
+                    <span className="font-semibold text-slate-400">Type :</span> <span className="text-indigo-600 font-medium">{cardTypes}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between pt-2 border-t border-slate-100">
@@ -136,7 +157,7 @@ export default function SingleListing({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (onAddToCart) onAddToCart(listing, 1); // <-- On force explicitement la quantité à 1 ici
+              if (onAddToCart) onAddToCart(listing, 1);
             }}
             className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 rounded-2xl transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
           >
