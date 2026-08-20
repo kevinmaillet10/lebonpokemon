@@ -49,6 +49,8 @@ import { leagueSteps } from './constants/kantoLeague';
 import { leagueSteps as baseLeagueSteps } from './constants/kantoLeague';
 import { Capacitor } from '@capacitor/core';
 import WhosThatPokemon from './components/WhosThatPokemon';
+import { getFlattenedPlaylist } from './musicData';
+import PokemonMusicPlayer from "./components/PokemonMusicPlayer";
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(() => {
@@ -89,6 +91,7 @@ export default function App() {
   const [totalCardsCount, setTotalCardsCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [selectedSellerId, setSelectedSellerId] = useState(null);
+  const fullPlaylist = getFlattenedPlaylist();
 
       // --- AJOUT POUR LE TUTORIEL ---
       useEffect(() => {
@@ -2392,6 +2395,8 @@ export default function App() {
           }} 
         />
       )}
+      {/* Lecteur de musique Pokémon flottant en bas à droite */}
+      <PokemonMusicPlayer playlist={fullPlaylist} />
       {/* --- LE FOOTER S'INSTALLE ICI --- */}
       <Footer />
     </div>
