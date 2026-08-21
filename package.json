@@ -13,7 +13,7 @@
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@stripe/stripe-js": "^9.12.1",
-    "@supabase/supabase-js": "^2.110.9",
+    "@supabase/supabase-js": "^2.112.3",
     "@tcgdex/sdk": "^2.9.0",
     "canvas-confetti": "^1.9.4",
     "dotenv": "^17.4.2",

@@ -35,7 +35,6 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
     async function fetchData() {
       setLoading(true);
 
-      // 1. Récupération du Pokédex
       const { data: pokedexData } = await supabase
         .from('pokedex')
         .select('*')
@@ -46,7 +45,6 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
         setPokedexList(pokedexData);
       }
 
-      // 2. Récupération de TOUTES les cartes (Pagination par blocs de 1000)
       let allPokedexData = [];
       let page = 0;
       const pageSize = 1000;
@@ -55,9 +53,9 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
       try {
           while (fetchMore) {
               const { data, error } = await supabase
-                  .from('pokedex')
-                  .select('*')
-                  .range(page * pageSize, (page + 1) * pageSize - 1);
+                .from('pokedex')
+                .select('*')
+                .range(page * pageSize, (page + 1) * pageSize - 1);
 
               if (error || !data || data.length === 0) {
                   fetchMore = false;
@@ -71,14 +69,12 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
               }
           }
           
-          // Remplace "setPokedexList" par le nom exact de ton state pour le Pokédex
           setPokedexList(allPokedexData);
 
       } catch (err) {
           console.error("Erreur chargement pokédex:", err);
       }
 
-      // 3. Récupération de la collection utilisateur
       if (user) {
         const { data: collData } = await supabase
           .from('user_collection')
@@ -101,7 +97,6 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
     fetchData();
   }, [user]);
 
-  // Calcul unique et optimisé des stats pour éviter les lags et plantages
   useEffect(() => {
     if (allCardsList.length === 0 || pokedexList.length === 0) return;
 
@@ -124,7 +119,6 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
     setPokemonStatsMap(statsMap);
   }, [allCardsList, pokedexList, userCollection]);
 
-  // Chargement des cartes détaillées pour un Pokémon cliqué
   useEffect(() => {
     async function fetchCardsForPokemon() {
       if (!selectedPokemon) return;
@@ -157,7 +151,17 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
       const response = await fetch(`https://api.tcgdex.net/v2/fr/cards/${card.id}`);
       if (response.ok) {
         const fullCard = await response.json();
-        if (fullCard && fullCard.pricing) {
+        
+        if (!card.illustrator && fullCard.illustrator) {
+          await supabase
+            .from('cards')
+            .update({ illustrator: fullCard.illustrator })
+            .eq('id', card.id);
+          
+          setSelectedCard(prev => ({ ...prev, illustrator: fullCard.illustrator }));
+        }
+
+        if (fullCard.pricing) {
           setSelectedCard(prev => ({ ...prev, pricing: fullCard.pricing }));
         }
       }
@@ -256,6 +260,7 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
               const isOwnedNormal = !!userCollection[`${card.id}_normal`];
               const isOwnedReverse = !!userCollection[`${card.id}_reverse`];
               const isOwned = isOwnedNormal || isOwnedReverse;
+              const cardSetName = card.series?.name || card.set_name;
 
               return (
                 <div 
@@ -265,6 +270,12 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
                     isOwned ? 'border-emerald-500 bg-[#1e222b]' : 'border-slate-800 bg-[#1e222b]/40 opacity-70'
                   }`}
                 >
+                  {card.rarity && (
+                    <span className="absolute top-3 left-3 bg-slate-900/90 text-indigo-300 text-[10px] font-semibold px-2 py-1 rounded-md border border-slate-700/80 shadow z-10">
+                      {card.rarity}
+                    </span>
+                  )}
+
                   {isOwned && (
                     <span className="absolute top-3 right-3 bg-emerald-500 text-white p-1 rounded-full z-10 shadow-md">
                       <Check size={12} />
@@ -288,9 +299,17 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
                     <span className="text-[10px] text-slate-500 text-center px-2">Image non disponible</span>
                   </div>
 
-                  <div className="w-full flex justify-between items-center bg-[#16181d] px-3 py-2 rounded-xl border border-slate-800">
-                    <span className="text-xs font-bold text-slate-200 truncate">{card.name}</span>
-                    <span className="text-xs font-mono text-slate-400">{card.number || ''}</span>
+                  <div className="w-full flex flex-col gap-1.5 bg-[#16181d] p-3 rounded-xl border border-slate-800">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-slate-200 truncate">{card.name}</span>
+                      <span className="text-xs font-mono text-slate-400">{card.number || ''}</span>
+                    </div>
+
+                    {cardSetName && (
+                      <span className="text-[11px] text-slate-400 truncate">
+                        📁 {cardSetName}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -366,12 +385,12 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
       
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-black text-white tracking-tight">Pokédex</h1>
+        
         <button type="button" onClick={onBack} className="flex items-center gap-1 text-xs font-bold text-slate-300 hover:text-white cursor-pointer bg-slate-800 border border-slate-700 px-3 py-2 rounded-xl transition-colors">
           <ArrowLeft size={14} /> Retour
         </button>
       </div>
 
-      {/* SÉLECTEUR DE RÉGIONS AVEC STATS DYNAMIQUES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {REGIONS.map((reg) => {
           const isSelected = selectedRegion === reg.id;
@@ -403,7 +422,6 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
         })}
       </div>
 
-      {/* BARRE DE PROGRESSION GLOBALE (NATIONAL) */}
       <div className="bg-[#1e222b] border border-slate-800 p-6 rounded-2xl flex flex-col gap-3">
         <div className="flex justify-between items-center">
           <span className="text-base font-black text-white">National</span>
