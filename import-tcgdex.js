@@ -1,94 +1,98 @@
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// ⚠️ Remplis ces deux constantes avec tes vraies informations Supabase
-// (Il est conseillé d'utiliser la clé "service_role" pour contourner le RLS lors des insertions massives)
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY; // On utilise ta clé anon
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-async function importTcgdexData() {
-  console.log("🚀 Début de l'importation des extensions et des cartes TCGDex...");
+async function importTcgdexData(targetSetId = null) {
+  console.log("🚀 Début de l'importation TCGDex...");
   
   try {
-    // 1. Récupérer toutes les extensions françaises
-    const res = await fetch('https://api.tcgdex.net/v2/fr/sets');
-    const sets = await res.json();
+    let setsToProcess = [];
 
-    if (!Array.isArray(sets)) {
-      throw new Error("Impossible de récupérer la liste des extensions depuis l'API TCGDex.");
+    if (targetSetId) {
+      // Si on veut cibler un seul set (ex: 'mep')
+      const res = await fetch(`https://api.tcgdex.net/v2/fr/sets/${targetSetId}`);
+      const setData = await res.json();
+      setsToProcess = [setData];
+    } else {
+      // Sinon, on prend tout
+      const res = await fetch('https://api.tcgdex.net/v2/fr/sets');
+      setsToProcess = await res.json();
     }
 
-    console.log(`-> ${sets.length} extensions trouvées. Traitement en cours...`);
+    for (const set of setsToProcess) {
+      console.log(`📦 Traitement de l'extension : ${set.name} (${set.id})`);
 
-    for (const set of sets) {
-      console.log(`📦 Import de l'extension : ${set.name} (${set.id})`);
-
-      // Insertion de l'extension
-      const { error: setError } = await supabase.from('extensions').upsert({
+      // 1. Insertion de l'extension
+      await supabase.from('extensions').upsert({
         id: set.id,
         name: set.name,
         logo: set.logo,
         symbol: set.symbol
-      });
+      }, { onConflict: 'id' });
 
-      if (setError) {
-        console.error(`Erreur pour l'extension ${set.id}:`, setError.message);
-        continue;
-      }
-
-      // 2. Récupérer le détail de l'extension
+      // 2. Récupérer le détail complet du set
       const detailRes = await fetch(`https://api.tcgdex.net/v2/fr/sets/${set.id}`);
       const setDetail = await detailRes.json();
 
       if (setDetail && setDetail.cards && setDetail.cards.length > 0) {
         const cardsToInsert = [];
         
-        console.log(`🔍 Récupération des détails pour ${setDetail.cards.length} cartes...`);
+        console.log(`🔍 Récupération des détails pour ${setDetail.cards.length} cartes de ${set.id}...`);
 
         for (const basicCard of setDetail.cards) {
-          // On appelle l'API pour CHAQUE carte afin d'avoir les infos complètes
-          const cardRes = await fetch(`https://api.tcgdex.net/v2/fr/cards/${basicCard.id}`);
-          const card = await cardRes.json();
+          try {
+            const cardRes = await fetch(`https://api.tcgdex.net/v2/fr/cards/${basicCard.id}`);
+            if (!cardRes.ok) continue;
+            const card = await cardRes.json();
 
-          cardsToInsert.push({
-            id: card.id,
-            name: card.name,
-            extension_id: set.id,
-            image_url: card.image ? `${card.image}/low.webp` : null,
-            rarity: card.rarity || null,
-            variants: card.variants || {}, // TCGdex renvoie souvent un objet, pas un tableau
-            local_id: card.localId || card.number || null,
-            hp: card.hp ? parseInt(card.hp, 10) : null,
-            illustrator: card.illustrator || null,
-            category: card.category || null,
-            stage: card.stage || null,
-            regulation_mark: card.regulationMark || null,
-            types: card.types || [],
-            dex_id: card.dexId || (card.dexIds ? card.dexIds[0] : null) // dex_id est souvent un tableau ou un chiffre
-          });
+            cardsToInsert.push({
+              id: card.id,
+              name: card.name,
+              set_id: set.id, // ⚠️ Corrigé : 'set_id' au lieu de 'extension_id'
+              image_url: card.image ? `${card.image}/high.webp` : null, // ⚠️ En HD (.webp)
+              rarity: card.rarity || 'Commune',
+              variants: card.variants || {},
+              number: card.localId || card.number || '1', // ⚠️ Corrigé : 'number' au lieu de 'local_id'
+              hp: card.hp ? parseInt(card.hp, 10) : null,
+              illustrator: card.illustrator || null,
+              category: card.category || 'Pokémon',
+              stage: card.stage || null,
+              regulation_mark: card.regulationMark || null,
+              types: card.types || [],
+              dex_id: card.dexId || (card.dexIds ? card.dexIds[0] : null)
+            });
+          } catch (cardErr) {
+            console.warn(`⚠️ Erreur sur la carte ${basicCard.id}:`, cardErr.message);
+          }
         }
 
-        // Insertion par lots (batch) des cartes pour aller plus vite
-        const { error: cardError } = await supabase
-          .from('cards')
-          .upsert(cardsToInsert, { onConflict: 'id' });
+        // Insertion par lots dans Supabase
+        if (cardsToInsert.length > 0) {
+          const { error: cardError } = await supabase
+            .from('cards')
+            .upsert(cardsToInsert, { onConflict: 'id' });
 
-        if (cardError) {
-          console.error(`Erreur pour les cartes de l'extension ${set.id}:`, cardError.message);
-        } else {
-          console.log(`   ✨ ${cardsToInsert.length} cartes enregistrées pour ${set.name}.`);
+          if (cardError) {
+            console.error(`❌ Erreur SQL pour ${set.id}:`, cardError.message);
+          } else {
+            console.log(`✨ ${cardsToInsert.length} cartes enregistrées pour ${set.name}.`);
+          }
         }
       }
 
-      // Petite pause de sécurité pour ne pas saturer l'API TCGDex
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 200));
     }
 
-    console.log("✅ Importation de toutes les données TCGDex terminée avec succès !");
+    console.log("✅ Importation terminée avec succès !");
   } catch (err) {
-    console.error("❌ Erreur critique lors de l'import :", err);
+    console.error("❌ Erreur critique :", err);
   }
 }
 
-importTcgdexData();
+// Pour tester tout de suite uniquement sur le set "mep" qui posait problème :
+importTcgdexData('mee');
