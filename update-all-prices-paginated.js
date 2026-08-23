@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Utilise les variables d'environnement de GitHub, ou tes clés par défaut en local
-const supabaseUrl = process.env.SUPABASE_URL || 'https://antapclcscsywdileetm.supabase.co';
-const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_FGPhBEowiqCo_-30bR7DMw_8-DtYIfS';
+// Connexion directe en dur (élimine tout problème de variable d'environnement)
+const supabase = createClient(
+  'https://antapclcscsywdileetm.supabase.co',
+  'sb_publishable_FGPhBEowiqCo_-30bR7DMw_8-DtYIfS'
+);
 
-const supabase = createClient(supabaseUrl, supabaseKey);
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function updateAllPricesPaginated() {
