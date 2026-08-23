@@ -42,113 +42,117 @@ export default function CardDetailModal({ listing, onClose, onOpenInboxWithConve
     : (rawTypes ? String(rawTypes) : '');
 
   useEffect(() => {
-    async function fetchCardMarketData() {
-      if (!specificCardId && !cardNumber) return;
+    const card = listing?.cards || listing?.card || listing;
+    if (!card) return;
 
-      setIsFetchingPrice(true);
+    setIsFetchingPrice(false);
 
-      try {
-        const { data, error } = await supabase.functions.invoke('get-cardmarket-price', {
-          body: { 
-            cardId: specificCardId, 
-            name: cardName,
-            number: cardNumber,
-            series: cardExtension
-          }
-        });
+    const cardVersion = listing?.version || listing?.variant || 'standard';
+    const isHolo = cardVersion === 'reverse' || cardVersion === 'holo' || cardVersion === 'Holo';
+    
+    const currentAvg = isHolo ? card.avg_holo : card.avg;
+    const currentLow = isHolo ? card.low_holo : card.low;
+    const currentTrend = isHolo ? card.trend_holo : card.trend;
+    const currentAvg1 = isHolo ? card.avg1_holo : card.avg1;
+    const currentAvg7 = isHolo ? card.avg7_holo : card.avg7;
+    const currentAvg30 = isHolo ? card.avg30_holo : card.avg30;
 
-        if (error) throw error;
+    // Calcul ou récupération propre des variations en pourcentage
+    const calcVariation = (current, past) => {
+      if (!current || !past || past === 0) return 0;
+      return Number((((current - past) / past) * 100).toFixed(1));
+    };
 
-        const raw = data?.data || data?.result || data || {};
-        const cmPricing = raw.pricing?.cardmarket || raw.cards?.pricing?.cardmarket || raw.standard || raw;
+    const standardVar = card.variation ?? calcVariation(card.avg, card.avg30);
+    const reverseVar = card.variation_holo ?? calcVariation(card.avg_holo, card.avg30_holo);
 
-        const avgPrice = cmPricing.avg ?? cmPricing.moy_vente ?? cmPricing.price ?? cmPricing.averagePrice ?? cmPricing.tendance ?? null;
-        const d1Price = cmPricing.avg1 ?? cmPricing.d1 ?? cmPricing.j1 ?? null;
-        const d7Price = cmPricing.avg7 ?? cmPricing.d7 ?? cmPricing.j7 ?? null;
-        const d30Price = cmPricing.avg30 ?? cmPricing.d30 ?? cmPricing.j30 ?? null;
-        const variationVal = cmPricing.variation ?? cmPricing.variation_percentage ?? 0;
-
-        const revAvg = cmPricing['avg-holo'] ?? cmPricing.moy_vente_holo ?? null;
-        const revD1 = cmPricing['avg1-holo'] ?? null;
-        const revD7 = cmPricing['avg7-holo'] ?? null;
-        const revD30 = cmPricing['avg30-holo'] ?? null;
-        const revVariation = cmPricing['variation-holo'] ?? 0;
-
-        if (avgPrice !== null && avgPrice !== undefined) {
-          const basePrice = Number(avgPrice);
-
-          setMarketData({
-            standard: { 
-              avg: basePrice, 
-              d1: d1Price !== null ? Number(d1Price) : null, 
-              d7: d7Price !== null ? Number(d7Price) : null, 
-              d30: d30Price !== null ? Number(d30Price) : null, 
-              variation: Number(variationVal)
-            },
-            reverse: { 
-              avg: revAvg !== null ? Number(revAvg) : null, 
-              d1: revD1 !== null ? Number(revD1) : null, 
-              d7: revD7 !== null ? Number(revD7) : null, 
-              d30: revD30 !== null ? Number(revD30) : null, 
-              variation: Number(revVariation)
-            }
-          });
-
-          if (data?.history && Array.isArray(data.history) && data.history.length > 0) {
-            setRawHistory(data.history);
-          } else {
-            const today = new Date();
-            const generatedHistory = [];
-            if (d30Price) generatedHistory.unshift({ price: Number(d30Price), recorded_at: new Date(today.getTime() - 30 * 86400000).toISOString().split('T')[0] });
-            if (d7Price) generatedHistory.unshift({ price: Number(d7Price), recorded_at: new Date(today.getTime() - 7 * 86400000).toISOString().split('T')[0] });
-            if (d1Price) generatedHistory.unshift({ price: Number(d1Price), recorded_at: new Date(today.getTime() - 1 * 86400000).toISOString().split('T')[0] });
-
-            generatedHistory.push({
-              price: basePrice,
-              recorded_at: today.toISOString().split('T')[0]
-            });
-
-            setRawHistory(generatedHistory);
-          }
-        }
-      } catch (error) {
-        console.error("Erreur lors de la récupération des cotes Cardmarket :", error);
-      } finally {
-        setIsFetchingPrice(false);
+    // Alimente les données avec les variations incluses
+    setMarketData({
+      standard: { 
+        avg: card.avg ?? null,
+        low: card.low ?? null,
+        trend: card.trend ?? null,
+        d1: card.avg1 ?? null, 
+        d7: card.avg7 ?? null, 
+        d30: card.avg30 ?? null,
+        variation: standardVar,
+      },
+      reverse: { 
+        avg: card.avg_holo ?? null, 
+        low: card.low_holo ?? null, 
+        trend: card.trend_holo ?? null, 
+        d1: card.avg1_holo ?? null, 
+        d7: card.avg7_holo ?? null, 
+        d30: card.avg30_holo ?? null,
+        variation: reverseVar,
       }
+    });
+
+    // Utilitaire pour obtenir une date propre au format YYYY-MM-DD sans décalage horaire
+    const formatDateString = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const today = new Date();
+    const generatedHistory = [];
+    
+    const d30 = new Date(); d30.setDate(today.getDate() - 30);
+    const d7 = new Date(); d7.setDate(today.getDate() - 7);
+    const d1 = new Date(); d1.setDate(today.getDate() - 1);
+
+    if (currentAvg30) generatedHistory.push({ price: Number(currentAvg30), recorded_at: formatDateString(d30) });
+    if (currentAvg7) generatedHistory.push({ price: Number(currentAvg7), recorded_at: formatDateString(d7) });
+    if (currentAvg1) generatedHistory.push({ price: Number(currentAvg1), recorded_at: formatDateString(d1) });
+
+    if (currentAvg) {
+      generatedHistory.push({
+        price: Number(currentAvg),
+        recorded_at: formatDateString(today)
+      });
     }
 
-    fetchCardMarketData();
-  }, [specificCardId, cardNumber, cardName, cardExtension, selectedPeriod]);
+    // Tri chronologique indispensable
+    generatedHistory.sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at));
+    setRawHistory(generatedHistory);
 
-  const getFilteredHistory = () => {
+  }, [listing]);
+
+const getFilteredHistory = () => {
+    const daysMap = { '1J': 1, '7J': 7, '15J': 15, '30J': 30 };
+    const daysLimit = daysMap[selectedPeriod] || 30;    
+    
+    // 1. Calcule la date limite au format texte "YYYY-MM-DD"
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysLimit);
+    const year = cutoffDate.getFullYear();
+    const month = String(cutoffDate.getMonth() + 1).padStart(2, '0');
+    const day = String(cutoffDate.getDate()).padStart(2, '0');
+    const cutoffString = `${year}-${month}-${day}`;
+
+    // 2. Si rawHistory est vide, on génère un faux historique de secours
     if (!rawHistory || rawHistory.length === 0) {
-      const now = new Date();
-      const daysCount = selectedPeriod === '1J' ? 1 : selectedPeriod === '7J' ? 7 : selectedPeriod === '15J' ? 15 : 30;
       const baseAvg = marketData.standard.avg || 1;
       const history = [];
       
-      for (let i = daysCount; i >= 0; i--) {
-        const date = new Date(now);
+      for (let i = daysLimit; i >= 0; i--) {
+        const date = new Date();
         date.setDate(date.getDate() - i);
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
         history.push({
           price: baseAvg,
-          recorded_at: date.toISOString().split('T')[0]
+          recorded_at: `${y}-${m}-${d}`
         });
       }
       return history;
     }
     
-    const daysMap = { '1J': 1, '7J': 7, '15J': 15, '30J': 30 };
-    const daysLimit = daysMap[selectedPeriod] || 30;    
-    const endDate = new Date();
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysLimit);
-
-    return rawHistory.filter(item => {
-      const itemDate = new Date(item.recorded_at);
-      return itemDate >= cutoffDate && itemDate <= endDate;
-    });
+    // 3. Filtrage direct par texte (zéro décalage horaire, les points s'affichent nickel)
+    return rawHistory.filter(item => item.recorded_at >= cutoffString);
   };
 
   const standardHistory = getFilteredHistory();
