@@ -86,7 +86,7 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
           }
         });
 
-        // 4. Récupérer les annonces par lots (sécurité pour gros volumes)
+        // 4. Récupérer les annonces par lots
         let listings = [];
         let listingStart = 0;
         let fetchMoreListings = true;
@@ -289,6 +289,17 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
     localStorage.setItem(cartKey, JSON.stringify(currentCart));
     localStorage.setItem('active_tab', 'cart');
 
+    const checkoutPayload = {
+      sellerId: vendor?.id,
+      itemPrice: Number(totalCardPrice || 0),
+      cardsTotal: Number(totalCardPrice || 0),
+      isTrade: false
+    };
+    localStorage.setItem('pendingCheckout', JSON.stringify(checkoutPayload));
+
+    window.dispatchEvent(new Event('open-checkout'));
+    window.dispatchEvent(new Event('storage'));
+
     if (onAddToCart) {
       onAddToCart(vendorPayload);
     }
@@ -330,7 +341,8 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
           }, 0);
 
           const shippingFee = checkedCards.length > 0 ? 2.50 : 0;
-          const grandTotal = totalCardPrice + shippingFee;
+          const buyerProtection = checkedCards.length > 0 ? Math.max(0.80, totalCardPrice * 0.10) : 0;
+          const grandTotal = totalCardPrice + shippingFee + buyerProtection;
           const allSelected = vendor.cards.length > 0 && vendor.cards.every(card => vendorSelections[card.uniqueKey]);
           
           const maxVisibleCards = 20;
@@ -385,6 +397,12 @@ export default function MissingCardsOptimizer({ user, userId, onAddToCart, onVie
                     📦 Frais de port <Info size={12} className="text-slate-500 cursor-help" />
                   </span>
                   <span className="font-bold text-white">{shippingFee.toFixed(2)} €</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 flex items-center gap-1">
+                    🛡️ Protection acheteur <Info size={12} className="text-slate-500 cursor-help" title="10% min 0.80€" />
+                  </span>
+                  <span className="font-bold text-white">{buyerProtection.toFixed(2)} €</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-slate-800 text-sm">
                   <span className="font-extrabold text-slate-200">Total</span>

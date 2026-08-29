@@ -139,6 +139,17 @@ export default function CollectionManager({ user, onBack }) {
         .eq('set_id', selectedSeries.id)
         .order('number', { ascending: true });
 
+      // Tri numérique correct (gère 1, 2, ..., 10, 11 et les promos)
+      const sortedCards = (cardsData || []).sort((a, b) => {
+        const numA = parseInt(a.number, 10);
+        const numB = parseInt(b.number, 10);
+
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        return String(a.number).localeCompare(String(b.number));
+      });
+
       setCards(cardsData || []);
       setCurrentPage(0);
       setLoading(false);
@@ -277,7 +288,7 @@ export default function CollectionManager({ user, onBack }) {
     }, {});
 
     return (
-      <div className="min-h-screen bg-[#120d09] text-white w-full px-6 py-6 relative" onClick={() => setActiveColorPicker(null)}>
+      <div className="min-h-screen bg-[#0e1015] text-white w-full px-6 py-6 relative" onClick={() => setActiveColorPicker(null)}>
         <div className="w-full max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <div>
@@ -296,17 +307,40 @@ export default function CollectionManager({ user, onBack }) {
           ) : (
             Object.entries(groupedByBlock).map(([blockName, series]) => (
               <div key={blockName} className="mb-16">
-                <div className="flex items-center gap-3 mb-4">
-                  <h2 className="text-base font-extrabold text-amber-400 tracking-wider uppercase">{blockName}</h2>
-                  <div className="flex-1 h-px bg-gradient-to-r from-amber-500/50 via-[#362012] to-transparent"></div>
-                </div>
+                
+                {/* STRUCTURE DU MEUBLE DE RANGEMENT */}
+                <div className="rounded-3xl shadow-[0_30px_70px_rgba(10,5,2,0.9)] relative overflow-hidden border border-[#26150a] bg-[#120804]">
+                  
+                  {/* Fond intérieur sombre du meuble */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-[#1a0e07] via-[#100703] to-[#080402] opacity-95 pointer-events-none"></div>
 
-                {/* STRUCTURE DE L'ÉTAGÈRE EN BOIS FONCÉ */}
-                <div 
-                  className="rounded-3xl p-8 pt-12 shadow-[0_30px_70px_rgba(10,5,2,0.9)] relative overflow-visible border border-[#362317]"
-                  style={{ background: 'linear-gradient(180deg, #1c120c 0%, #150d08 100%)' }}
-                >
-                  <div className="flex items-end gap-6 overflow-x-auto pb-10 pt-14 px-4 scrollbar-thin scrollbar-thumb-amber-700">
+                  {/* PLANCHE SUPÉRIEURE AVEC TEXTURE BOIS ET NOM DU BLOC INCRUSTÉ */}
+                  <div 
+                    className="relative w-full h-16 z-20 flex items-center justify-center px-6 overflow-hidden"
+                    style={{
+                      backgroundColor: '#4a2814',
+                      backgroundImage: `
+                        url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='woodGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.08 0.002' numOctaves='4' stitchTiles='stitch' result='noise'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.2  0 0 0 0 0.1  0 0 0 0 0.05  0 0 0 1 0' in='noise'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23woodGrain)' opacity='0.6'/%3E%3C/svg%3E"),
+                        linear-gradient(180deg, #6e3d1f 0%, #4a2814 40%, #2b1509 100%)
+                      `,
+                      boxShadow: 'inset 0 2px 4px rgba(255, 255, 255, 0.2), inset 0 -5px 10px rgba(0, 0, 0, 0.9), 0 10px 25px rgba(0,0,0,0.8)',
+                      borderBottom: '2px solid #1a0d05',
+                      borderTop: '1px solid #8c4e27'
+                    }}
+                  >
+                    <h2 
+                      className="text-lg md:text-xl font-black tracking-widest uppercase select-none"
+                      style={{
+                        color: '#1a0d05',
+                        textShadow: '0 1px 1px rgba(255, 255, 255, 0.35), 0 -1px 1px rgba(0, 0, 0, 0.6)'
+                      }}
+                    >
+                      {blockName}
+                    </h2>
+                  </div>
+
+                  {/* CONTENEUR DES CLASSEURS POSÉS SUR LA PLANCHE */}
+                  <div className="relative z-10 flex items-end gap-6 overflow-x-auto px-6 pt-10 pb-4 scrollbar-thin scrollbar-thumb-[#523118] scrollbar-track-transparent">
                     {series.map((serie) => {
                       const stat = seriesStats[serie.id] || { total: 0, owned: 0, percent: 0, shortCode: serie.id?.toUpperCase() || 'SET' };
                       const isCompleted = stat.percent === 100 && stat.total > 0;
@@ -359,7 +393,7 @@ export default function CollectionManager({ user, onBack }) {
                               setSelectedSeries(serie);
                               setStep('cover');
                             }}
-                            whileHover={{ scale: 1.03, y: -20 }}
+                            whileHover={{ scale: 1.03, y: -15 }}
                             whileTap={{ scale: 0.98 }}
                             transition={{ type: "spring", stiffness: 350, damping: 25 }}
                             className="cursor-pointer relative flex flex-col items-center"
@@ -413,16 +447,26 @@ export default function CollectionManager({ user, onBack }) {
                             </div>
                           </motion.div>
 
-                          <div className="w-32 h-4 bg-black/95 rounded-full blur-md mt-1"></div>
+                          {/* Ombre portée au sol du classeur */}
+                          <div className="w-32 h-3 bg-black/90 rounded-full blur-md -mt-1.5 z-10"></div>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* PLANCHE DE BOIS FONCÉ INFÉRIEURE */}
+                  {/* LA PLANCHE INFÉRIEURE AVEC TEXTURE BOIS SVG */}
                   <div 
-                    className="absolute bottom-0 left-0 right-0 h-7 border-t-2 border-[#573922] shadow-[0_-5px_15px_rgba(0,0,0,0.8)]"
-                    style={{ background: 'linear-gradient(90deg, #26170d 0%, #402919 50%, #26170d 100%)' }}
+                    className="relative w-full h-14 z-20"
+                    style={{
+                      backgroundColor: '#4a2814',
+                      backgroundImage: `
+                        url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='woodGrain2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.08 0.002' numOctaves='4' stitchTiles='stitch' result='noise'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.2  0 0 0 0 0.1  0 0 0 0 0.05  0 0 0 1 0' in='noise'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23woodGrain2)' opacity='0.6'/%3E%3C/svg%3E"),
+                        linear-gradient(180deg, #8c4e27 0%, #6e3d1f 25%, #4a2814 65%, #2b1509 100%)
+                      `,
+                      boxShadow: 'inset 0 4px 6px rgba(255, 255, 255, 0.25), inset 0 -6px 12px rgba(0, 0, 0, 0.9), 0 -15px 30px rgba(0,0,0,0.9)',
+                      borderTop: '2px solid #a85e33',
+                      borderBottom: '1px solid #080402'
+                    }}
                   ></div>
                 </div>
               </div>
@@ -464,7 +508,7 @@ export default function CollectionManager({ user, onBack }) {
     };
 
     return (
-      <div className="min-h-screen bg-[#120d09] text-white w-full px-6 py-6 flex flex-col items-center justify-center relative overflow-hidden">
+      <div className="min-h-screen bg-[#0e1015] text-white w-full px-6 py-6 flex flex-col items-center justify-center relative overflow-hidden">
         
         {/* ANIMATION DE ZIP OUVERTURE / FERMETURE */}
         {isZipping && (
@@ -567,7 +611,7 @@ export default function CollectionManager({ user, onBack }) {
   // VUE 3 : CLASSEUR OUVERT (GRILLE DE CARTES)
   // ==========================================
   return (
-    <div className="min-h-screen bg-[#120d09] text-white w-full px-6 py-6 relative">
+    <div className="min-h-screen bg-[#0e1015] text-white w-full px-6 py-6 relative">
       
       {/* ANIMATION DE FERMETURE LORSQU'ON RANGE LE CLASSEUR DEPUIS LA GRILLE */}
       {isClosingBinder && (

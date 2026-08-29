@@ -200,6 +200,15 @@ export default function Navbar({
                     >
                       ❤️ Mes favoris
                     </button>
+
+                    {/* --- AJOUT : Ma Wishlist juste en dessous --- */}
+                    <button 
+                      onClick={() => { setCurrentView('wishlist'); setIsUserMenuOpen(false); }} 
+                      className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Heart size={15} className="text-pink-400" /> Ma Wishlist
+                    </button>
+
                     <button
                       onClick={async () => {
                         await supabase.auth.signOut();

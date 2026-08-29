@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 
-export default function NotificationBell({ currentUserId, onOpenConversation }) {
+export default function NotificationBell({ currentUserId, onOpenConversation, onOpenListing }) {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   
@@ -11,7 +11,7 @@ export default function NotificationBell({ currentUserId, onOpenConversation }) 
     const fetchNotifs = async () => {
       const { data } = await supabase
         .from('notifications')
-        .select('*')
+        .select('*, listings(*)')
         .eq('user_id', currentUserId)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -20,17 +20,20 @@ export default function NotificationBell({ currentUserId, onOpenConversation }) 
 
     fetchNotifs();
 
+    const channelName = `notifications_user_${currentUserId}`;
+
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
+          filter: `user_id=eq.${currentUserId}`
         },
         (payload) => {
-          if (payload.new && payload.new.user_id === currentUserId) {
+          if (payload.new) {
             setNotifications((prev) => [payload.new, ...prev]);
           }
         }
@@ -44,6 +47,7 @@ export default function NotificationBell({ currentUserId, onOpenConversation }) 
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
+  // Fonction pour ouvrir/fermer le menu et marquer comme lu
   const toggleDropdown = async () => {
     setIsOpen(!isOpen);
     if (unreadCount > 0) {
@@ -58,10 +62,12 @@ export default function NotificationBell({ currentUserId, onOpenConversation }) 
   };
 
   const handleNotificationClick = (notif) => {
-    // Si la notification possède un ID de conversation, on ouvre directement le chat associé
+    setIsOpen(false);
+    
     if (notif.conversation_id && onOpenConversation) {
-      setIsOpen(false);
       onOpenConversation(notif.conversation_id);
+    } else if (notif.listing_id && onOpenListing) {
+      onOpenListing(notif.listing_id);
     }
   };
 
@@ -81,26 +87,36 @@ export default function NotificationBell({ currentUserId, onOpenConversation }) 
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 p-4 z-50 text-slate-800">
-          <h3 className="font-black text-slate-900 text-sm mb-3">Notifications</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
+        <div className="absolute right-0 mt-2 w-80 bg-[#1e222b] rounded-2xl shadow-2xl border border-slate-700/80 p-4 z-50 text-white">
+          <h3 className="font-black text-white text-sm mb-3">Notifications</h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
             {notifications.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-4">Aucune notification pour le moment.</p>
             ) : (
-              notifications.map(notif => (
-                <div 
-                  key={notif.id} 
-                  onClick={() => handleNotificationClick(notif)}
-                  className={`p-3 rounded-xl text-xs transition-all ${notif.conversation_id ? 'cursor-pointer hover:bg-indigo-100/60' : ''} ${notif.is_read ? 'bg-slate-50 text-slate-600' : 'bg-indigo-50/60 text-indigo-900 font-medium'}`}
-                >
-                  {notif.title && <p className="font-bold mb-0.5">{notif.title}</p>}
-                  <p>{notif.message}</p>
-                  <div className="flex justify-between items-center mt-1">
-                    <span className="text-[10px] text-slate-400">{new Date(notif.created_at).toLocaleDateString()}</span>
-                    {notif.conversation_id && <span className="text-[10px] text-indigo-600 font-bold">Voir la discussion →</span>}
+              notifications.map(notif => {
+                const isClickable = notif.conversation_id || notif.listing_id;
+                return (
+                  <div 
+                    key={notif.id} 
+                    onClick={() => handleNotificationClick(notif)}
+                    className={`p-3 rounded-xl text-xs transition-all border ${
+                      isClickable ? 'cursor-pointer hover:border-indigo-500/50' : 'border-transparent'
+                    } ${
+                      notif.is_read 
+                        ? 'bg-[#16181d] text-slate-400 border-slate-800' 
+                        : 'bg-indigo-950/40 text-indigo-200 border-indigo-800/60 font-medium'
+                    }`}
+                  >
+                    {notif.title && <p className="font-bold text-white mb-0.5">{notif.title}</p>}
+                    <p>{notif.message}</p>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-[10px] text-slate-500">{new Date(notif.created_at).toLocaleDateString()}</span>
+                      {notif.conversation_id && <span className="text-[10px] text-indigo-400 font-bold">Voir la discussion →</span>}
+                      {notif.listing_id && <span className="text-[10px] text-indigo-400 font-bold">Voir l'annonce →</span>}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

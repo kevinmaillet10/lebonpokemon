@@ -574,9 +574,13 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                   placeholder="0.00"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                {selectedCard?.pricing?.cardmarket && (
+                {selectedCard && (selectedCard.trend || selectedCard.avg || selectedCard.trend_holo || selectedCard.avg_holo) && (
                   <p className="text-[11px] text-slate-500 mt-1">
-                    💡 Tendance Cardmarket : <span className="font-bold text-slate-700">{selectedCard.pricing.cardmarket.trend ?? selectedCard.pricing.cardmarket.avg} €</span>
+                    💡 Tendance Cardmarket : <span className="font-bold text-slate-700">
+                      {selectedVersion === 'reverse' || selectedVersion === 'holo'
+                        ? (selectedCard.trend_holo ?? selectedCard.avg_holo ?? '-')
+                        : (selectedCard.trend ?? selectedCard.avg ?? '-')} €
+                    </span>
                   </p>
                 )}
               </div>

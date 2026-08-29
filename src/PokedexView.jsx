@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 import { ArrowLeft, Search, Check, ImageOff, X, Store, TrendingUp } from 'lucide-react';
 
@@ -30,51 +30,74 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
   
   const [selectedRegion, setSelectedRegion] = useState('national');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [userWishlist, setUserWishlist] = useState({});
+
+  // Référence pour sauvegarder la position du scroll
+  const scrollPosRef = useRef(0);
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
 
-      const { data: pokedexData } = await supabase
-        .from('pokedex')
-        .select('*')
-        .order('id', { ascending: true })
-        .range(0, 2000);
-
-      if (pokedexData) {
-        setPokedexList(pokedexData);
-      }
-
+      // 1. Chargement paginé du Pokédex
       let allPokedexData = [];
       let page = 0;
       const pageSize = 1000;
-      let fetchMore = true;
+      let fetchMorePokedex = true;
 
       try {
-          while (fetchMore) {
-              const { data, error } = await supabase
-                .from('pokedex')
-                .select('*')
-                .range(page * pageSize, (page + 1) * pageSize - 1);
+        while (fetchMorePokedex) {
+          const { data, error } = await supabase
+            .from('pokedex')
+            .select('*')
+            .range(page * pageSize, (page + 1) * pageSize - 1);
 
-              if (error || !data || data.length === 0) {
-                  fetchMore = false;
-              } else {
-                  allPokedexData = [...allPokedexData, ...data];
-                  if (data.length < pageSize) {
-                      fetchMore = false;
-                  } else {
-                      page++;
-                  }
-              }
+          if (error || !data || data.length === 0) {
+            fetchMorePokedex = false;
+          } else {
+            allPokedexData = [...allPokedexData, ...data];
+            if (data.length < pageSize) {
+              fetchMorePokedex = false;
+            } else {
+              page++;
+            }
           }
-          
-          setPokedexList(allPokedexData);
-
+        }
+        setPokedexList(allPokedexData);
       } catch (err) {
-          console.error("Erreur chargement pokédex:", err);
+        console.error("Erreur chargement pokédex:", err);
       }
 
+// 2. Chargement paginé de toutes les cartes (nécessaire pour les stats)
+      let allCardsData = [];
+      let cardPage = 0;
+      const cardPageSize = 1000;
+      let fetchMoreCards = true;
+
+      try {
+        while (fetchMoreCards) {
+          const { data, error } = await supabase
+            .from('cards')
+            .select('*')
+            .range(cardPage * cardPageSize, (cardPage + 1) * cardPageSize - 1);
+
+          if (error || !data || data.length === 0) {
+            fetchMoreCards = false;
+          } else {
+            allCardsData = [...allCardsData, ...data];
+            if (data.length < cardPageSize) {
+              fetchMoreCards = false;
+            } else {
+              cardPage++;
+            }
+          }
+        }
+        setAllCardsList(allCardsData);
+      } catch (err) {
+        console.error("Erreur chargement des cartes:", err);
+      }
+
+      // 3. Chargement de la collection utilisateur
       if (user) {
         const { data: collData } = await supabase
           .from('user_collection')
@@ -89,7 +112,21 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
           });
           setUserCollection(userCollMap);
         }
-      }
+        // ---> AJOUTE CE BLOC ICI : Chargement de la wishlist <---
+          const { data: wishData } = await supabase
+            .from('wishlist')
+            .select('*')
+            .eq('user_id', user.id);
+
+          if (wishData) {
+            const wishMap = {};
+            wishData.forEach(item => {
+              const variantKey = item.variant ? item.variant : 'normal';
+              wishMap[`${item.card_id}_${variantKey}`] = true;
+            });
+            setUserWishlist(wishMap);
+          }
+        }
 
       setLoading(false);
     }
@@ -97,6 +134,7 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
     fetchData();
   }, [user]);
 
+  // Calcul des statistiques (total et possédés) pour chaque Pokémon
   useEffect(() => {
     if (allCardsList.length === 0 || pokedexList.length === 0) return;
 
@@ -140,9 +178,7 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
       setLoading(false);
     }
 
-    if (selectedPokemon) {
-      fetchCardsForPokemon();
-    }
+    fetchCardsForPokemon();
   }, [selectedPokemon]);
 
   const handleCardSelect = async (card) => {
@@ -194,6 +230,30 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
     }
   };
 
+  const handleToggleWishlist = async (cardId, variant = 'normal') => {
+    if (!user) return;
+    
+    const key = `${cardId}_${variant}`;
+    const isCurrentlyInWishlist = !!userWishlist[key];
+
+    // Mise à jour optimiste de l'UI
+    setUserWishlist(prev => ({ ...prev, [key]: !isCurrentlyInWishlist }));
+
+    try {
+      if (isCurrentlyInWishlist) {
+        let query = supabase.from('wishlist').delete().eq('user_id', user.id).eq('card_id', cardId);
+        if (variant === 'normal') query = query.eq('variant', 'normal');
+        else query = query.eq('variant', variant);
+        await query;
+      } else {
+        await supabase.from('wishlist').insert([{ user_id: user.id, card_id: cardId, variant: variant }]);
+      }
+    } catch (err) {
+      console.error("Erreur synchro Wishlist Supabase:", err);
+      setUserWishlist(prev => ({ ...prev, [key]: isCurrentlyInWishlist })); // Rollback en cas d'erreur
+    }
+  };
+
   const getPokemonStats = (pokeName) => {
     return pokemonStatsMap[pokeName] || { total: 0, owned: 0 };
   };
@@ -218,19 +278,21 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
   const nationalStats = getRegionStats(REGIONS[0]);
   
   const filteredPokedex = pokedexList.filter(poke => {
-    const inRegion = poke.id >= currentRegionObj.range[0] && poke.id <= currentRegionObj.range[1];
-    if (!inRegion) return false;
+  const inRegion = poke.id >= currentRegionObj.range[0] && poke.id <= currentRegionObj.range[1];
+  if (!inRegion) return false;
 
-    const matchesSearch = poke.name.toLowerCase().includes(searchQuery.toLowerCase()) || poke.id.toString().includes(searchQuery);
-    if (!matchesSearch) return false;
+  const matchesSearch = poke.name.toLowerCase().includes(searchQuery.toLowerCase()) || poke.id.toString().includes(searchQuery);
+  if (!matchesSearch) return false;
 
-    const stats = getPokemonStats(poke.name);
-    
-    if (filterStatus === 'caught' && stats.owned === 0) return false;
-    if (filterStatus === 'missing' && stats.owned > 0) return false;
+  const stats = getPokemonStats(poke.name);
+  
+  if (filterStatus === 'caught' && stats.owned === 0) return false;
+  if (filterStatus === 'missing' && stats.owned > 0) return false;
+
+
 
     return true;
-  });
+  }).sort((a, b) => a.id - b.id); // 👈 ET ASSUREZ-VOUS QUE CE .sort() EST BIEN LÀ
 
   if (selectedPokemon) {
     const totalCardsCount = pokemonCards.length;
@@ -240,7 +302,15 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
         <div className="flex items-center justify-between mb-6 bg-[#1e222b] p-3.5 rounded-2xl border border-slate-700/60">
           <button 
             type="button"
-            onClick={() => setSelectedPokemon(null)}
+            onClick={() => {
+              setSelectedPokemon(null);
+              setTimeout(() => {
+                window.scrollTo({
+                  top: scrollPosRef.current,
+                  behavior: 'instant'
+                });
+              }, 0);
+            }}
             className="flex items-center gap-1 text-xs font-bold text-slate-300 hover:text-white cursor-pointer bg-slate-800 border border-slate-700 px-3 py-2 rounded-xl transition-colors"
           >
             <ArrowLeft size={14} /> Retour au Pokédex
@@ -367,9 +437,30 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
                     <span className="text-sm text-slate-400 group-hover:text-white transition-colors">Possédé (Reverse)</span>
                     <input type="checkbox" checked={!!userCollection[`${selectedCard.id}_reverse`]} onChange={() => handleToggleVariant(selectedCard.id, 'reverse')} className="w-5 h-5 rounded border-slate-700 bg-slate-800 checked:bg-indigo-600 cursor-pointer" />
                   </label>
+
+                  {/* AJOUT : Option Wishlist */}
+                  <label className="flex items-center justify-between cursor-pointer group pt-2 border-t border-slate-800/60">
+                    <span className="text-sm text-pink-400 group-hover:text-pink-300 transition-colors flex items-center gap-1.5">
+                      ❤️ Ajouter à ma Wishlist
+                    </span>
+                    <input 
+                      type="checkbox" 
+                      checked={!!userWishlist[`${selectedCard.id}_normal`]} 
+                      onChange={() => handleToggleWishlist(selectedCard.id, 'normal')} 
+                      className="w-5 h-5 rounded border-slate-700 bg-slate-800 checked:bg-pink-600 cursor-pointer" 
+                    />
+                  </label>
                 </div>
 
-                <button onClick={() => onNavigateToShop && onNavigateToShop(selectedCard.name)} className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                <button 
+                  onClick={() => {
+                    if (onNavigateToShop) {
+                      onNavigateToShop(selectedCard.name);
+                    }
+                    setSelectedCard(null); // Ferme la modale de détail
+                  }} 
+                  className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
                   <Store size={15} /> Rechercher dans les annonces de la boutique
                 </button>
               </div>
@@ -382,7 +473,6 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
 
   return (
     <div className="min-h-screen bg-[#16181d] text-white w-full px-6 py-6 space-y-6">
-      
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-black text-white tracking-tight">Pokédex</h1>
         
@@ -479,7 +569,10 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
             return (
               <div 
                 key={poke.id}
-                onClick={() => setSelectedPokemon(poke)}
+                onClick={() => {
+                  scrollPosRef.current = window.scrollY;
+                  setSelectedPokemon(poke);
+                }}
                 className="bg-[#1e222b] border border-slate-800 hover:border-purple-500 cursor-pointer rounded-2xl p-4 flex flex-col items-center transition-all group relative"
               >
                 <div className="w-full flex justify-between items-center mb-1">

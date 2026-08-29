@@ -51,6 +51,8 @@ import { Capacitor } from '@capacitor/core';
 import WhosThatPokemon from './components/WhosThatPokemon';
 import { getFlattenedPlaylist } from './musicData';
 import PokemonMusicPlayer from "./components/PokemonMusicPlayer";
+import WishListView from './WishListView';
+import FairTradeView from './FairTradeView';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(() => {
@@ -92,6 +94,9 @@ export default function App() {
   const [totalCount, setTotalCount] = useState(0);
   const [selectedSellerId, setSelectedSellerId] = useState(null);
   const fullPlaylist = getFlattenedPlaylist();
+
+  // Dans votre composant principal (ex: App.jsx ou Dashboard.jsx)
+  const [isListingModalOpen, setIsListingModalOpen] = useState(false);
 
       // --- AJOUT POUR LE TUTORIEL ---
       useEffect(() => {
@@ -168,6 +173,17 @@ export default function App() {
       console.error("Erreur lors de la vérification des badges :", err);
     }
   };
+
+  useEffect(() => {
+    const handleOpenCheckout = () => {
+      // Ferme la modale de chat si elle est ouverte et bascule la vue
+      // setIsChatOpen(false); // Décommentez si vous avez un état pour fermer le chat
+      setCurrentView('checkout'); 
+    };
+
+    window.addEventListener('open-checkout', handleOpenCheckout);
+    return () => window.removeEventListener('open-checkout', handleOpenCheckout);
+  }, []);
 
   const handleAddCard = async (rawCardData) => {
     // On s'assure que la quantité par défaut est de 1 si elle est absente
@@ -291,6 +307,29 @@ export default function App() {
 
     fetchBlocksAndSeries();
   }, []);
+
+  // Fonction déclenchée au clic sur l'alerte de prix
+const handleOpenListing = async (listingId) => {
+  try {
+    // 1. Récupérer l'annonce et les infos de la carte associée depuis Supabase
+    const { data, error } = await supabase
+      .from('listings')
+      .select('id, price, condition, description, seller_id, cards(name, image_url)')
+      .eq('id', listingId)
+      .single();
+
+    if (error) throw error;
+
+    if (data) {
+      setSelectedListing(data);
+      setIsListingModalOpen(true); // Ouvre votre modal de détail d'annonce
+    }
+  } catch (err) {
+    console.error("Erreur :", err);
+    alert("Cette annonce n'est plus disponible ou a été supprimée.");
+  }
+};
+
   
 // État du panier multi-vendeurs et des modes de livraison par vendeur (avec persistance localStorage)
   const [cart, setCart] = useState(() => {
@@ -320,14 +359,40 @@ export default function App() {
     setActiveSellerForRelay(null);
   };
 
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  // Fonction pour ouvrir le checkout pour un échange
+  const handleOpenTradeCheckout = (listingId, sellerId) => {
+    const tradeCheckoutData = {
+      listingId: listingId,
+      sellerId: sellerId,
+      itemPrice: 0,        // 0 € pour l'échange de la carte
+      shippingFee: 2.99,   // Ajustez si besoin ou mettez 0 pour remise en main propre
+      selectedCarrier: "Mondial Relay",
+      isTrade: true
+    };
+    
+    localStorage.setItem('pendingCheckout', JSON.stringify(tradeCheckoutData));
+    
+    setIsChatOpen(false); // 1. Ferme la modale de chat
+    setCurrentView('checkout'); // 2. Bascule vers la vue Checkout.jsx
+  };
+
   const handleCheckout = async (sellerId, sellerGroup, shipping, finalTotal) => {
-
     try {
-      const shippingMethodName = shipping?.name || 'Lettre Suivante';
-      const shippingCost = shipping?.price || 2.50;
 
-      const itemPrice = sellerGroup.items.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
-      const platformFee = Number((itemPrice * 0.05).toFixed(2));
+      // 1. Vérifier si on provient d'un échange validé
+      const pendingData = JSON.parse(localStorage.getItem('pendingCheckout') || '{}');
+      const isTrade = pendingData.isTrade || false;
+
+      const shippingMethodName = shipping?.name || 'Lettre Suivante';
+      const shippingCost = shipping?.price !== undefined ? Number(shipping.price) : 2.50;
+
+      // 2. Si c'est un échange, le prix de l'article est de 0 €. Sinon, on calcule normalement.
+      const itemPrice = isTrade ? 0 : sellerGroup.items.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
+      
+      // La commission de 5% s'appliquera sur 0 € (donc 0 € aussi pour l'échange)
+      const buyerProtection = Math.max(0.80, 0.70 + (finalItemPrice * 0.05));
 
       // 1. Insertion de la commande principale
       const { data: orderData, error: orderError } = await supabase
@@ -418,6 +483,9 @@ export default function App() {
           });
         }
       }
+
+      // Nettoyer le localStorage de l'échange une fois la commande passée
+      localStorage.removeItem('pendingCheckout');
 
       // Succès
       alert("Commande validée avec succès !");
@@ -1122,6 +1190,15 @@ export default function App() {
                     >
                       ❤️ Mes favoris
                     </button>
+
+                    {/* --- AJOUT : Ma Wishlist juste en dessous --- */}
+                    <button 
+                      onClick={() => { setCurrentView('wishlist'); setIsUserMenuOpen(false); }} 
+                      className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      ❤️ Ma Wishlist
+                    </button>
+
                     <button
                       onClick={() => { setCurrentView('purchases'); setIsMobileMenuOpen(false); }}
                       className="text-left py-2 px-3 text-xs font-medium text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2 cursor-pointer"
@@ -1264,7 +1341,26 @@ export default function App() {
 
           <div className="flex items-center gap-3">
             {/* BOUTON NOTIFICATIONS CONNECTÉ */}
-            {user && <NotificationBell currentUserId={user.id} onOpenConversation={handleOpenInboxWithConversation} />}
+            {user && (
+              <NotificationBell 
+                currentUserId={user.id} 
+                onOpenConversation={handleOpenInboxWithConversation}
+                onOpenListing={async (listingId) => {
+                  // 1. Récupérer l'annonce depuis Supabase
+                  const { data } = await supabase
+                    .from('listings')
+                    .select('*, profiles(*)')
+                    .eq('id', listingId)
+                    .single();
+                  
+                  if (data) {
+                    // 2. Ouvrir le modal de l'annonce (adaptez le nom de votre état/modal si besoin)
+                    setSelectedListing(data);
+                    setIsListingModalOpen(true); 
+                  }
+                }}
+              />
+            )}
 
             {/* BOUTON PANIER */}
             <button
@@ -1277,6 +1373,14 @@ export default function App() {
                   {totalCartItemsCount}
                 </span>
               )}
+            </button>
+
+            {/* Bouton Échange Équitable */}
+            <button
+              onClick={() => setCurrentView('fair-trade')}
+              className="flex items-center gap-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-md"
+            >
+              🔄 Échange Équitable
             </button>
 
             {/* NOUVEAU BOUTON : Optimiseur de cartes manquantes */}
@@ -1389,15 +1493,15 @@ export default function App() {
                   </button>
 
                   {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 text-slate-700">
+                    <div className="absolute right-0 mt-2 w-56 bg-slate-900 rounded-2xl shadow-xl border border-slate-200 py-2 z-50 text-slate-700">
                       <div className="px-4 py-2 border-b border-slate-100">
-                        <p className="text-xs font-bold text-slate-900 truncate">{profile.username || 'Mon Compte'}</p>
-                        <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                        <p className="text-sm font-bold text-slate-300 truncate">{profile.username || 'Mon Compte'}</p>
+                        <p className="text-sm text-slate-300 truncate">{user.email}</p>
                       </div>
                       
                       <button
                         onClick={() => { setCurrentView('settings'); setIsUserMenuOpen(false); }}
-                        className="w-full text-left px-4 py-2.5 text-xs font-medium hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
                       >
                         ⚙️ Paramètres du profil
                       </button>
@@ -1407,9 +1511,17 @@ export default function App() {
                           setCurrentView('favorites');
                           setIsUserMenuOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
                       >
                         ❤️ Mes favoris
+                      </button>
+
+                      {/* --- AJOUT : Ma Wishlist juste en dessous --- */}
+                      <button 
+                        onClick={() => { setCurrentView('wishlist'); setIsUserMenuOpen(false); }}
+                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        ❤️ Ma Wishlist
                       </button>
 
                       <button
@@ -1417,28 +1529,28 @@ export default function App() {
                           setCurrentView('purchases');
                           setIsUserMenuOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
                       >
                         🛍️ Mes achats
                       </button>
 
                       <button
                         onClick={() => { setCurrentView('league'); setIsUserMenuOpen(false); }}
-                        className="w-full text-left px-4 py-2.5 text-xs font-medium text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer flex items-center gap-2 font-bold"
+                        className="w-full text-left px-4 py-2 text-sm font-medium text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer flex items-center gap-2 font-bold"
                       >
                         ⚡ Ligue Pokémon (Kanto)
                       </button>
 
                       <button
                         onClick={() => { setCurrentView('account'); setIsUserMenuOpen(false); }}
-                        className="w-full text-left px-4 py-2.5 text-xs font-medium hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
                       >
                         📦 Mes annonces ({userListings.length})
                       </button>
 
                       <button
                         onClick={() => { setCurrentView('inbox'); setIsUserMenuOpen(false); }}
-                        className="w-full text-left px-4 py-2.5 text-xs font-medium hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2"
+                        className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 transition-colors cursor-pointer"
                       >
                         💬 Messagerie
                       </button>
@@ -1454,7 +1566,7 @@ export default function App() {
 
                       <button
                         onClick={handleLogout}
-                        className="w-full text-left px-4 py-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        className="w-full text-left px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                       >
                         Déconnexion
                       </button>
@@ -1908,9 +2020,9 @@ export default function App() {
         ) : currentView === 'settings' || currentView === 'account' ? (
           <div className="space-y-6">
             <form onSubmit={handleUpdateProfile} className="space-y-6">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <div className="bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-gray-800 font-medium text-sm">Ta photo de profil</span>
+                  <span className="text-white font-medium text-sm">Ta photo de profil</span>
                   <div className="flex items-center gap-4">
                     {profile.avatar_url ? (
                       <img src={profile.avatar_url} alt="Avatar" className="w-12 h-12 rounded-full object-cover border border-gray-200 shadow-sm" />
@@ -1938,7 +2050,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center justify-between py-3 border-b border-gray-100 gap-4">
-                  <span className="text-gray-800 font-medium text-sm shrink-0">Nom d'utilisateur</span>
+                  <span className="text-white font-medium text-sm shrink-0">Nom d'utilisateur</span>
                   <input
                     type="text"
                     value={profile.username|| ''}
@@ -1949,26 +2061,26 @@ export default function App() {
                 </div>
 
                 <div className="py-3 space-y-2">
-                  <span className="text-gray-800 font-medium text-sm block">À propos de toi</span>
+                  <span className="text-white font-medium text-sm block">À propos de toi</span>
                   <input 
                     type="text" 
                     value={profile.bio}
                     onChange={(e) => setProfile({...profile, bio: e.target.value})}
                     placeholder="Présente-toi aux autres membres" 
-                    className="w-full text-sm text-gray-700 border-b border-gray-200 pb-2 focus:outline-none focus:border-teal-600 bg-transparent"
+                    className="w-full text-sm text-white border-b border-text-whitewhite pb-2 focus:outline-none focus:border-teal-600 bg-transparent"
                   />
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Ma position</h3>
+              <div className="bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white">Ma position</h3>
 
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-gray-800 font-medium text-sm">Pays</span>
+                  <span className="text-white font-medium text-sm">Pays</span>
                   <select 
                     value={profile.country}
                     onChange={(e) => setProfile({...profile, country: e.target.value})}
-                    className="text-sm text-gray-700 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
+                    className="text-sm text- bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
                   >
                     <option value="France">France</option>
                     <option value="Belgique">Belgique</option>
@@ -1977,7 +2089,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <span className="text-gray-800 font-medium text-sm">Ville / Département</span>
+                  <span className="text-white font-medium text-sm">Ville / Département</span>
                   <div className="flex gap-2">
                     <input 
                       type="text"
@@ -1998,7 +2110,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center justify-between py-3">
-                  <span className="text-gray-800 font-medium text-sm">Afficher la ville dans le profil</span>
+                  <span className="text-white font-medium text-sm">Afficher la ville dans le profil</span>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
                       type="checkbox" 
@@ -2011,9 +2123,9 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <div className="bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between py-2">
-                  <span className="text-gray-800 font-medium text-sm">Langue</span>
+                  <span className="text-white font-medium text-sm">Langue</span>
                   <select 
                     value={profile.language}
                     onChange={(e) => setProfile({...profile, language: e.target.value})}
@@ -2024,13 +2136,13 @@ export default function App() {
                   </select>
                 </div>
 
-                <div className="bg-amber-50/70 border border-amber-200 p-5 rounded-xl space-y-4 mt-4">
+                <div className="bg-slate-900 border border-amber-200 p-5 rounded-xl space-y-4 mt-4">
                   <span className="text-amber-800 font-bold text-xs uppercase tracking-wider block">
                     🔒 Informations personnelles (Visibles uniquement par vous)
                     </span>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Prénom</label>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white mb-1">Prénom</label>
                         <input
                           type="text"
                           value={profile.first_name || ''}
@@ -2039,7 +2151,7 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Nom</label>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-white mb-1">Nom</label>
                         <input
                           type="text"
                           value={profile.last_name || ''}
@@ -2048,7 +2160,7 @@ export default function App() {
                         />
                       </div>
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Téléphone</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-white mb-1">Téléphone</label>
                       <input
                         type="text"
                         value={profile.phone || ''}
@@ -2058,7 +2170,7 @@ export default function App() {
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Adresse de livraison</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-white mb-1">Adresse de livraison</label>
                       <input
                         type="text"
                         value={profile.address || ''}
@@ -2068,7 +2180,7 @@ export default function App() {
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Code Postal</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-white mb-1">Code Postal</label>
                       <input
                         type="text"
                         value={profile.postal_code || ''}
@@ -2079,7 +2191,7 @@ export default function App() {
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Ville</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-white mb-1">Ville</label>
                       <input
                         type="text"
                         value={profile.city || ''}
@@ -2105,7 +2217,7 @@ export default function App() {
             </form>
 
             <div className="pt-6">
-              <h3 className="text-lg font-bold text-slate-900 mb-4">Mes annonces en ligne ({userListings.length})</h3>
+              <h3 className="text-lg font-bold text-white mb-4">Mes annonces en ligne ({userListings.length})</h3>
               {userListings.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                   <p className="text-slate-600 font-medium">Vous n'avez publié aucune annonce.</p>
@@ -2116,7 +2228,7 @@ export default function App() {
                   {userListings.map((item) => (
                     <div key={item?.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm flex flex-col justify-between">
                       
-                      <div className="p-3 bg-slate-50 border-b border-slate-100 flex gap-2">
+                      <div className="p-3 bg-slate-900 border-b border-slate-100 flex gap-2">
                         <button 
                           onClick={() => setEditingListing(item)}
                           className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-semibold py-2 rounded-lg cursor-pointer transition-colors text-center"
@@ -2214,11 +2326,30 @@ export default function App() {
               />
             )}
 
-            {currentView === 'pokedex' && (
-              <PokedexView 
-                user={user} 
+            {currentView === 'fair-trade' && (
+              <FairTradeView 
                 currentUserId={user?.id} 
-                onBack={() => setCurrentView('home')} 
+                onOpenConversation={handleOpenInboxWithConversation} 
+              />
+            )}
+
+            {currentView === 'checkout' && (
+              <Checkout 
+                onSuccessfulCheckout={(order) => {
+                  // Ce qui se passe une fois la commande validée avec succès :
+                  setCurrentView('home'); // Redirige vers l'accueil ou une page de succès
+                }} 
+              />
+            )}
+
+            {currentView === 'pokedex' && (
+              <PokedexView
+                user={user}
+                onBack={() => setCurrentView('home')} // ou autre vue précédente
+                onNavigateToShop={(cardName) => {
+                  setSearchQuery(cardName);
+                  setCurrentView('home'); // ou la vue de votre boutique/marché
+                }}
               />
             )}
 
@@ -2252,6 +2383,18 @@ export default function App() {
                   setSellerId(sellerId);
                   setCurrentView('seller-profile');
                 }}
+              />
+            )}
+
+            {/* Pour l'affichage de la vue */}
+            {currentView === 'wishlist' && (
+              <WishListView 
+                user={user} 
+                onBack={() => setCurrentView('pokedex')} 
+                onNavigateToShop={(cardName) => {
+                  setSearchQuery(cardName);
+                  setCurrentView('home');
+                }} 
               />
             )}
 

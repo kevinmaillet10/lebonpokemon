@@ -30,6 +30,7 @@ export default function MondialRelayModal({ isOpen, sellerId, onClose, onSelectP
               if (isMounted) {
                 if (fallbackTimer) clearTimeout(fallbackTimer);
                 onSelectPoint(sellerId, data);
+                onClose(); // Fermeture automatique de la modale
               }
             }
           });
@@ -85,7 +86,7 @@ export default function MondialRelayModal({ isOpen, sellerId, onClose, onSelectP
       if (checkInterval) clearInterval(checkInterval);
       if (fallbackTimer) clearTimeout(fallbackTimer);
     };
-  }, [isOpen, sellerId, onSelectPoint]);
+  }, [isOpen, sellerId, onSelectPoint, onClose]);
 
   // Fonction de simulation pour contourner le blocage du widget si besoin
   const handleSimulateSelect = () => {
@@ -119,7 +120,8 @@ export default function MondialRelayModal({ isOpen, sellerId, onClose, onSelectP
 
         {/* Corps de la modale */}
         <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center">
-          <div id="zone-widget-mondial-relay" className="min-h-[400px] w-full">
+          {/* Hauteur fixe explicite pour forcer le rendu du widget */}
+          <div id="zone-widget-mondial-relay" className="h-[450px] w-full relative">
             {/* Le widget s'injectera ici */}
           </div>
 

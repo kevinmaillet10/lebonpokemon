@@ -36,13 +36,6 @@ async function importSeriesAndCards() {
       continue;
     }
 
-    /*
-    if (importedSetIds.has(setBrief.id)) {
-      console.log(`⏩ Série déjà importée : ${setBrief.name} (${setBrief.id}) - Ignorée.`);
-      continue;
-    }
-    */
-
     console.log(`\n📥 Traitement de la série : ${setBrief.name} (${setBrief.id})...`);
     
     const set = await tcgdex.set.get(setBrief.id);
@@ -73,16 +66,16 @@ async function importSeriesAndCards() {
         const card = await tcgdex.card.get(cardBrief.id);
         
         if (card && card.name) {
-          // Gestion robuste de l'URL de l'image
+          // CORRECTION ICI : Utilisation de /high.png (le standard valide pour TCGdex)
           let imageUrl = null;
           if (card.image) {
-            imageUrl = `${card.image}/high.webp`;
+            imageUrl = `${card.image}/high.png`;
           } else if (card.images?.high) {
             imageUrl = card.images.high;
           }
 
           const cardPayload = {
-            id: card.id,
+            id: card.id, // ID unique TCGdex (ex: dp5-33)
             set_id: set.id,
             name: card.name, 
             number: card.localId,

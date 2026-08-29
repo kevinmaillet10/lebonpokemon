@@ -2,9 +2,17 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from './supabase';
 import OrderTrackingModal from './OrderTrackingModal';
 
-export default function InboxView({ currentUserId, activeConversationId, onBack }) {
+export default function InboxView({ currentUserId, activeConversationId: propActiveId, onBack }) {
   const [conversations, setConversations] = useState([]);
   const [activeConv, setActiveConv] = useState(null);
+  const [activeConversationId, setActiveConversationId] = useState(propActiveId || null);
+
+  useEffect(() => {
+    if (propActiveId) {
+      setActiveConversationId(propActiveId);
+    }
+  }, [propActiveId]);
+
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -20,6 +28,8 @@ export default function InboxView({ currentUserId, activeConversationId, onBack 
   const messagesEndRef = useRef(null);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const isFinished = (activeConv?.order_step || 1) === 6;
+  const [counterOfferInputId, setCounterOfferInputId] = useState(null);
+  const [counterPrice, setCounterPrice] = useState('');
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -137,7 +147,7 @@ export default function InboxView({ currentUserId, activeConversationId, onBack 
             .from('profiles')
             .select('id, username, avatar_url')
             .eq('id', otherUserId)
-            .single();
+            .maybeSingle();
 
           let listingData = null;
           if (conv.listing_id) {
@@ -236,13 +246,12 @@ export default function InboxView({ currentUserId, activeConversationId, onBack 
     }
   }
 
-  async function handleSendMessage(e) {
-    e.preventDefault();
-    if ((!newMessage.trim() && !selectedFile) || !activeConv || !currentUserId) return;
+  async function handleSendMessage(e, textOverride = null) {
+    if (e) e.preventDefault();
+    const textToSend = textOverride !== null ? textOverride : newMessage.trim();
+    if ((!textToSend && !selectedFile) || !activeConv || !currentUserId) return;
 
-    const textToSend = newMessage.trim();
     let imageUrl = null;
-
     setUploadingImage(true);
 
     try {
@@ -344,7 +353,7 @@ export default function InboxView({ currentUserId, activeConversationId, onBack 
     return true;
   });
 
-return (
+  return (
     <div className="space-y-4 max-w-7xl mx-auto relative">
       <div className="flex items-center justify-between">
         <button
@@ -414,8 +423,10 @@ return (
 
                 return (
                   <div
-                    key={conv.id}
-                    onClick={() => setActiveConv(conv)}
+                    onClick={() => {
+                      setActiveConv(conv);
+                      setActiveConversationId(conv.id);
+                    }}
                     className={`p-3.5 cursor-pointer transition-colors flex items-center gap-3 relative ${
                       isChecked ? 'bg-red-50/50' : isSelected ? 'bg-indigo-50/80 border-l-4 border-indigo-600' : 'hover:bg-slate-100/70'
                     }`}
@@ -501,28 +512,144 @@ return (
                 ) : messages.length === 0 ? (
                   <div className="text-center text-xs text-slate-400 py-8">Envoyez votre premier message !</div>
                 ) : (
-                  messages.map((msg) => {
+                  messages.map((msg, index) => {
                     const isMe = msg.sender_id === currentUserId;
-                    const isSystemOrder = msg.content?.includes("Achat validé") || msg.content?.includes("Commande") || msg.content?.includes("colis");
 
+                    // 1. Détectez explicitement les deux types d'offres
+                    const isPriceOffer = msg.content?.includes("Proposition de prix");
+                    const isTradeOffer = msg.content?.includes("Proposition d'échange");
+
+                    // 2. Intégrez les deux dans la condition système
+                    const isSystemOrder = 
+                      msg.content?.includes("Achat validé") || 
+                      msg.content?.includes("Commande") || 
+                      msg.content?.includes("colis") || 
+                      isPriceOffer || 
+                      isTradeOffer;
+
+                    // 1. Si c'est un message système ou une offre
                     if (isSystemOrder) {
+                      const isCounterOpen = counterOfferInputId === msg.id;
+
                       return (
-                        <div key={msg.id} className="flex justify-center my-3">
+                        <div key={msg.id} className="flex justify-center my-3 w-full">
                           <div className="w-full max-w-md bg-white border border-indigo-100 rounded-2xl p-4 shadow-xs relative">
                             <div className="flex items-start gap-3">
                               <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 font-bold text-sm">
-                                📦
+                                {isPriceOffer ? '🏷️' : isTradeOffer ? '🤝' : '📦'}
                               </div>
                               <div className="flex-1">
-                                <h4 className="font-bold text-slate-900 text-xs mb-1">Suivi de commande</h4>
+                                <h4 className="font-bold text-slate-900 text-xs mb-1">
+                                  {isPriceOffer ? 'Proposition de prix' : isTradeOffer ? 'Proposition d\'échange' : 'Suivi de commande'}
+                                </h4>
                                 <p className="text-slate-600 text-xs mb-3">{msg.content}</p>
-                                <button
-                                  type="button"
-                                  onClick={() => setIsTrackingOpen(true)}
-                                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors"
-                                >
-                                  <span>Suivez-le à toutes les étapes de son acheminement &rarr;</span>
-                                </button>
+                                
+                                {(isPriceOffer || isTradeOffer) ? (
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          // 1. Envoyer le message de confirmation dans le chat
+                                          handleSendMessage(null, "Offre acceptée ! La transaction est validée.");
+
+                                          // 1. Extraire le vrai montant du prix depuis le contenu du message (ex: "0.20 €")
+                                          let extractedPrice = 0;
+                                          const matchPrice = msg.content?.match(/(\d+[\.,]?\d*)\s*€/);
+                                          if (matchPrice) {
+                                            extractedPrice = parseFloat(matchPrice[1].replace(',', '.'));
+                                          }
+
+                                          // 2. Envoyer le message de confirmation dans le chat
+                                          handleSendMessage(null, `Offre acceptée ! (${isPriceOffer ? extractedPrice + ' €' : 'Troc validé'})`);
+
+                                          // 3. Stocker les données dynamiquement selon le type d'offre
+                                          const checkoutData = {
+                                            listingId: activeConv?.listing_id,
+                                            sellerId: activeConv?.other_user_id || activeConv?.buyer_id,
+                                            itemPrice: isPriceOffer ? extractedPrice : 0, // Vrai prix si c'est une offre de prix, 0 si c'est un échange
+                                            shippingFee: 2.99,
+                                            selectedCarrier: "Mondial Relay",
+                                            isTrade: isTradeOffer // True uniquement si c'est un échange, False pour une offre de prix
+                                          };
+                                          
+                                          localStorage.setItem('pendingCheckout', JSON.stringify(checkoutData));
+
+                                          // 4. Ouvrir le panier
+                                          window.dispatchEvent(new CustomEvent('open-checkout'));
+
+                                        }}
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl transition cursor-pointer"
+                                      >
+                                        Accepter & Aller au panier
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSendMessage(null, "Offre refusée.")}
+                                        className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs py-2 px-3 rounded-xl transition cursor-pointer"
+                                      >
+                                        Refuser
+                                      </button>
+                                    </div>
+
+                                    {/* Contre-proposition uniquement disponible pour les prix */}
+                                    {isPriceOffer && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setCounterOfferInputId(isCounterOpen ? null : msg.id);
+                                            setCounterPrice('');
+                                          }}
+                                          className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs py-2 px-3 rounded-xl transition cursor-pointer"
+                                        >
+                                          🔄 {isCounterOpen ? "Fermer la contre-proposition" : "Faire une contre-proposition"}
+                                        </button>
+
+                                        {isCounterOpen && (
+                                          <div className="mt-2 pt-2 border-t border-indigo-100 flex gap-2 items-center animate-fadeIn">
+                                            <div className="relative flex-1">
+                                              <input
+                                                type="number"
+                                                step="0.01"
+                                                placeholder="Nouveau prix"
+                                                value={counterPrice}
+                                                onChange={(e) => setCounterPrice(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-6"
+                                              />
+                                              <span className="absolute right-2.5 top-1.5 text-xs text-slate-400">€</span>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                if (!counterPrice || isNaN(counterPrice)) {
+                                                  alert("Veuillez entrer un montant valide.");
+                                                  return;
+                                                }
+                                                const customMsg = `Proposition de prix : ${counterPrice} € (Contre-offre sur l'annonce "${activeConv.listing?.cards?.name || 'Carte'}")`;
+                                                handleSendMessage(null, customMsg);
+                                                setCounterOfferInputId(null);
+                                                setCounterPrice('');
+                                              }}
+                                              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer shrink-0"
+                                            >
+                                              Envoyer
+                                            </button>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsTrackingOpen(true)}
+                                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors"
+                                  >
+                                    <span>Suivez-le à toutes les étapes de son acheminement &rarr;</span>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -530,6 +657,7 @@ return (
                       );
                     }
 
+                    // 2. Sinon, bulle de message normale
                     return (
                       <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                         <div
@@ -687,37 +815,6 @@ return (
         </div>
 
       </div>
-
-      {/* MODALE DE ZOOM D'IMAGE (LIGHTBOX) */}
-      {zoomedImage && (
-        <div 
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setZoomedImage(null)}
-        >
-          <div className="relative max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-black p-2 border border-white/10 shadow-2xl">
-            <button 
-              onClick={() => setZoomedImage(null)}
-              className="absolute top-4 right-4 z-10 bg-black/60 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm cursor-pointer border border-white/20"
-            >
-              ✕
-            </button>
-            <img 
-              src={zoomedImage} 
-              alt="Zoom grand format" 
-              className="max-w-full max-h-[85vh] object-contain rounded-xl mx-auto"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* MODALE DE SUIVI DE COMMANDE */}
-      <OrderTrackingModal 
-        isOpen={isTrackingOpen} 
-        onClose={() => setIsTrackingOpen(false)} 
-        currentStep={activeConv?.order_step || 1} 
-        sellerName={activeConv ? getOtherUser(activeConv)?.username : "Le vendeur"} 
-        trackingInfo={activeConv?.tracking_number ? { number: activeConv.tracking_number, carrier: activeConv.carrier } : null}
-      />
     </div>
   );
 }
