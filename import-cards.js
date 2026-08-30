@@ -66,12 +66,17 @@ async function importSeriesAndCards() {
         const card = await tcgdex.card.get(cardBrief.id);
         
         if (card && card.name) {
-          // CORRECTION ICI : Utilisation de /high.png (le standard valide pour TCGdex)
+// Utilisation du dossier local uniquement pour Skyridge (ecard3)
           let imageUrl = null;
-          if (card.image) {
-            imageUrl = `${card.image}/high.png`;
-          } else if (card.images?.high) {
-            imageUrl = card.images.high;
+          if (set.id === 'ecard3') {
+            imageUrl = `/cartes pokemon/ecard3/${card.localId}.webp`;
+          } else {
+            // Comportement standard TCGdex pour les autres sets
+            if (card.image) {
+              imageUrl = `${card.image}/high.png`;
+            } else if (card.images?.high) {
+              imageUrl = card.images.high;
+            }
           }
 
           const cardPayload = {

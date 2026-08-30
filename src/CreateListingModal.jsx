@@ -359,17 +359,17 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 relative border border-slate-100 my-8">
+      <div className="bg-slate-900 rounded-3xl shadow-2xl max-w-2xl w-full p-6 relative border border-slate-100 my-8">
         
         <div className="flex justify-between items-center pb-4 mb-4 border-b border-slate-100">
-          <h2 className="text-lg font-black text-slate-900">
+          <h2 className="text-lg font-black text-white">
             {mode === 'details' && "Créer une annonce à l'unité"}
             {mode === 'card-select' && "Sélectionner une carte (Bloc > Série)"}
           </h2>
           <button 
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-900 hover:bg-slate-200 flex items-center justify-center text-slate-100 font-bold transition-colors cursor-pointer"
           >
             ✕
           </button>
@@ -386,9 +386,9 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
             
             <SecurityBanner />
 
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+            <div className="bg-slate-900 p-4 rounded-2xl border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-100">
                   Visuels de la carte ({totalImageCount}/5 photos)
                 </label>
                 {(selectedCard || imagePreviews.length > 0) && (
@@ -509,9 +509,9 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
             </div>
 
             {!selectedCard && (
-              <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+              <div className="grid grid-cols-2 gap-4 mb-4 p-4 bg-slate-900 border border-slate-200 rounded-xl">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Bloc</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-100 mb-1">Bloc</label>
                   <select
                     value={selectedBlock}
                     onChange={(e) => {
@@ -530,7 +530,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Série</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-100 mb-1">Série</label>
                   <select
                     value={selectedSeriesId}
                     onChange={(e) => setSelectedSeriesId(e.target.value)}
@@ -550,7 +550,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
 
             {!selectedCard && (
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Titre de l'annonce</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-100 mb-1">Titre de l'annonce</label>
                 <input
                   type="text"
                   required
@@ -564,7 +564,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Prix (€)</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-100 mb-1">Prix (€)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -586,7 +586,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Quantité</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-100 mb-1">Quantité</label>
                 <input
                   type="number"
                   min="1"
@@ -599,7 +599,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">État</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-100 mb-1">État</label>
               <select
                 value={condition}
                 onChange={(e) => setCondition(e.target.value)}
@@ -615,7 +615,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Version</label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-100 mb-1">Version</label>
               <select
                 value={finish}
                 onChange={(e) => setFinish(e.target.value)}

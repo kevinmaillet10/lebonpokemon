@@ -1314,7 +1314,7 @@ const handleOpenListing = async (listingId) => {
             {/* Le bouton Mini-jeu dans la Navbar */}
             <button 
               onClick={() => setIsMinigameOpen(true)}
-              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-6 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-lg"
+              className="bg-amber-500/10 hover:bg-slate-700 text-amber-400 border border-amber-500/30 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-lg"
             >
               <span>⚡</span>
               <span>Minijeu</span>
@@ -1378,7 +1378,7 @@ const handleOpenListing = async (listingId) => {
             {/* Bouton Échange Équitable */}
             <button
               onClick={() => setCurrentView('fair-trade')}
-              className="flex items-center gap-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-md"
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-1.5 border border-slate-700"
             >
               🔄 Échange Équitable
             </button>
@@ -1392,11 +1392,11 @@ const handleOpenListing = async (listingId) => {
             </button>
 
             <button
-              onClick={() => setCurrentView('pokedex')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                currentView === 'pokedex'
+              onClick={() => setCurrentView('Pokedex')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer whitespace-nowrap ${
+                currentView?.toLowerCase() === 'pokedex'
                   ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/30'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                  : 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700 hover:border-slate-600 hover:text-white'
               }`}
             >
               📖 Pokédex
@@ -1414,14 +1414,14 @@ const handleOpenListing = async (listingId) => {
               <>
                 <button
                   onClick={openMassListingSelector}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-1"
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-1.5 border border-slate-700"
                 >
                   <span>⚡</span> Ajout en masse
                 </button>
 
                 <button
                   onClick={() => setIsCreateOpen(true)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-1"
+              className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center gap-1.5 border border-slate-700"
                 >
                   <span>+</span> Vendre à l'unité
                 </button>

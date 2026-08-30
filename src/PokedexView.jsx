@@ -134,14 +134,20 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
     fetchData();
   }, [user]);
 
-  // Calcul des statistiques (total et possédés) pour chaque Pokémon
+// Calcul des statistiques (total et possédés) pour chaque Pokémon
   useEffect(() => {
     if (allCardsList.length === 0 || pokedexList.length === 0) return;
 
     const statsMap = {};
     pokedexList.forEach(poke => {
-      const pokeNameLower = poke.name.toLowerCase();
-      const matchingCards = allCardsList.filter(c => c.name && c.name.toLowerCase().includes(pokeNameLower));
+      const pokeNameNorm = poke.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      
+      const matchingCards = allCardsList.filter(card => {
+        if (!card.name) return false;
+        const cardNameNorm = card.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return cardNameNorm.includes(pokeNameNorm);
+      });
+
       const total = matchingCards.length;
       
       let owned = 0;
@@ -158,28 +164,23 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
   }, [allCardsList, pokedexList, userCollection]);
 
   useEffect(() => {
-    async function fetchCardsForPokemon() {
-      if (!selectedPokemon) return;
-      setLoading(true);
+    if (!selectedPokemon) return;
+    setLoading(true);
 
-      const { data } = await supabase
-        .from('cards')
-        .select(`
-          *,
-          series (
-            block_name,
-            name
-          )
-        `)
-        .ilike('name', `%${selectedPokemon.name}%`)
-        .order('release_date', { ascending: false });
+    const pokeNameNorm = selectedPokemon.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-      setPokemonCards(data || []);
-      setLoading(false);
-    }
+    const matchingCards = allCardsList.filter(card => {
+      if (!card.name) return false;
+      const cardNameNorm = card.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return cardNameNorm.includes(pokeNameNorm);
+    });
 
-    fetchCardsForPokemon();
-  }, [selectedPokemon]);
+    // Tri par date de sortie décroissante
+    matchingCards.sort((a, b) => new Date(b.release_date || 0) - new Date(a.release_date || 0));
+
+    setPokemonCards(matchingCards);
+    setLoading(false);
+  }, [selectedPokemon, allCardsList]);
 
   const handleCardSelect = async (card) => {
     setSelectedCard(card);
