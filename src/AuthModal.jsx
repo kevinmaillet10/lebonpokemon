@@ -23,7 +23,6 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Récupérer l'e-mail sauvegardé au chargement si "Se souvenir de moi" était actif
   useEffect(() => {
     const savedEmail = localStorage.getItem('saved_email');
     if (savedEmail) {
@@ -58,27 +57,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
         if (typeof onClose === 'function') onClose();
       } catch (err) {
         console.error("Erreur Auth:", err);
-        
-        let message = '';
-        if (typeof err === 'string') {
-          message = err;
-        } else if (err?.message) {
-          message = err.message;
-        } else if (err?.error_description) {
-          message = err.error_description;
-        } else {
-          message = "Une erreur est survenue lors de la communication avec le serveur.";
-        }
-
-        if (
-          message.includes('already registered') || 
-          message.includes('User already registered') ||
-          message.includes('already exists')
-        ) {
-          setErrorMsg("Cette adresse mail est déjà utilisée.");
-        } else {
-          setErrorMsg(message);
-        }
+        let message = err?.message || "Une erreur est survenue lors de la communication avec le serveur.";
+        setErrorMsg(message);
       } finally {
         setLoading(false);
       }
@@ -128,7 +108,6 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
 
         if (error) throw error;
 
-        // Gestion de la case "Se souvenir de moi"
         if (rememberMe) {
           localStorage.setItem('saved_email', email);
         } else {
@@ -149,35 +128,13 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
           }
         }
 
-        if (typeof onSuccess === 'function') {
-          onSuccess(data);
-        }
-
-        if (typeof onClose === 'function') {
-          onClose();
-        }
+        if (typeof onSuccess === 'function') onSuccess(data);
+        if (typeof onClose === 'function') onClose();
       }
     } catch (err) {
       console.error("Erreur Auth:", err);
-      
-      let message = '';
-      if (typeof err === 'string') {
-        message = err;
-      } else if (err?.message) {
-        message = err.message;
-      } else if (err?.error_description) {
-        message = err.error_description;
-      }
-
-      if (!message || message.trim() === '') {
-        message = "Erreur serveur (500). Vérifie ton trigger de création d'utilisateur ou ta table profiles dans Supabase.";
-      }
-
-      if (
-        message.includes('already registered') || 
-        message.includes('User already registered') ||
-        message.includes('already exists')
-      ) {
+      let message = err?.message || "Erreur serveur.";
+      if (message.includes('already registered') || message.includes('already exists')) {
         setErrorMsg("Cette adresse mail est déjà utilisée.");
       } else {
         setErrorMsg(message);
@@ -242,7 +199,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                 placeholder="123456"
                 value={mfaCode}
                 onChange={(e) => setMfaCode(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-center tracking-widest text-lg font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-center tracking-widest text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           ) : (
@@ -259,7 +216,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                       placeholder="Ex: Sacha_Pallet"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
 
@@ -273,7 +230,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                       placeholder="Ex: 18"
                       value={departmentCode}
                       onChange={(e) => setDepartmentCode(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </>
@@ -289,7 +246,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                   placeholder="vendeur@pokemon.fr"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
@@ -322,7 +279,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-12 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-4 pr-12 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                     <button
                       type="button"
