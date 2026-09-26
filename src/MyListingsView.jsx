@@ -917,7 +917,7 @@ export default function App() {
 
             {/* Section des annonces du profil */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
-              <h3 className="text-base font-bold text-slate-900">Mes annonces en ligne ({userListings.length})</h3>
+              <h3 className="text-base font-bold text-center text-slate-900">Mes annonces en ligne ({userListings.length})</h3>
               {userListings.length === 0 ? (
                 <p className="text-slate-400 text-xs">Vous n'avez posté aucune annonce pour l'instant.</p>
               ) : (

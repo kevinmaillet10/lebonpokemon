@@ -7,47 +7,48 @@ const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const tcgdex = new TCGdex('fr');
 
-async function updateAllSeriesLogos() {
-  console.log("🔄 Mise à jour globale des logos via TCGdex...");
+async function syncAllSeriesAndLogos() {
+  console.log("🔄 Synchronisation globale des extensions et logos via TCGdex...");
 
-  const { data: seriesList, error: fetchError } = await supabase.from('series').select('id, name');
+  try {
+    const sets = await tcgdex.set.list();
 
-  if (fetchError) {
-    console.error("❌ Erreur de récupération:", fetchError.message);
-    return;
-  }
-
-  for (const row of seriesList) {
-    // 🚫 Ignore les séries Pokémon Pocket (commençant par A, B ou P-)
-    if (row.id.startsWith('A') || row.id.startsWith('B') || row.id.startsWith('P-')) {
-      console.log(`⏩ Ignoré (Pokémon Pocket) : ${row.name} (${row.id})`);
-      continue;
+    if (!sets || sets.length === 0) {
+      console.log("❌ Aucune extension trouvée sur l'API TCGdex.");
+      return;
     }
 
-    const set = await tcgdex.set.get(row.id);
-    
-    if (set && set.logo) {
-      let logoUrl = set.logo;
-      if (!logoUrl.endsWith('.png')) {
+    for (const set of sets) {
+      if (set.id.startsWith('A') || set.id.startsWith('B') || set.id.startsWith('P-')) {
+        console.log(`⏩ Ignoré (Pokémon Pocket) : ${set.name} (${set.id})`);
+        continue;
+      }
+
+      let logoUrl = set.logo || null;
+      if (logoUrl && !logoUrl.endsWith('.png')) {
         logoUrl = `${logoUrl}.png`;
       }
 
-      const { error: updateError } = await supabase
+      const { error: upsertError } = await supabase
         .from('series')
-        .update({ logo_url: logoUrl })
-        .eq('id', row.id);
+        .upsert({
+          id: set.id,
+          name: set.name,
+          logo_url: logoUrl,
+          card_count: set.cardCount?.total || 0
+        }, { onConflict: 'id' });
 
-      if (updateError) {
-        console.error(`❌ Erreur pour ${row.name}:`, updateError.message);
+      if (upsertError) {
+        console.error(`❌ Erreur pour ${set.name} (${set.id}):`, upsertError.message);
       } else {
-        console.log(`✅ Logo mis à jour : ${row.name} -> ${logoUrl}`);
+        console.log(`✅ Synchronisé : ${set.name} (${set.id})`);
       }
-    } else {
-      console.warn(`⚠️ Pas de logo dispo sur TCGdex pour : ${row.name} (${row.id})`);
     }
-  }
 
-  console.log("\n🚀 Synchronisation des logos terminée !");
+    console.log("\n🚀 Synchronisation des extensions et logos terminée avec succès !");
+  } catch (err) {
+    console.error("❌ Erreur critique lors de la récupération TCGdex :", err);
+  }
 }
 
-updateAllSeriesLogos();
+syncAllSeriesAndLogos();

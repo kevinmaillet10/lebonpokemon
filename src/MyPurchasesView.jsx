@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import OrderTrackingModal from './OrderTrackingModal'; // Import de ta modale de suivi
-import ReportModal from './ReportModal'; // <-- 1. Importe ton composant ReportModal
+import OrderTrackingModal from './OrderTrackingModal';
+import ReportModal from './ReportModal'; // Import de ta modale de signalement
 
 export default function MyPurchasesView({ userId, onBack }) {
   const [purchases, setPurchases] = useState([]);
@@ -11,7 +11,7 @@ export default function MyPurchasesView({ userId, onBack }) {
   // États pour gérer l'ouverture de la modale de suivi et du signalement
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
-  const [isReportOpen, setIsReportOpen] = useState(false); // <-- 2. Ajout de l'état pour ouvrir/fermer le signalement
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   useEffect(() => {
     if (userId) {
@@ -46,6 +46,22 @@ export default function MyPurchasesView({ userId, onBack }) {
   const handleOpenTracking = (order) => {
     setSelectedOrder(order);
     setIsTrackingOpen(true);
+  };
+
+  // Traduction propre des statuts pour l'affichage
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'paid_escrow':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">🔒 Fonds bloqués (Séquestre)</span>;
+      case 'shipped':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">📦 Colis expédié</span>;
+      case 'completed':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✅ Terminé</span>;
+      case 'disputed':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">⚠️ Litige</span>;
+      default:
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">Confirmée</span>;
+    }
   };
 
   return (
@@ -106,12 +122,10 @@ export default function MyPurchasesView({ userId, onBack }) {
                       })}
                     </td>
                     <td className="py-3 px-4 text-xs">
-                      <span className="px-2.5 py-1 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        {order.status || 'Confirmée'}
-                      </span>
+                      {getStatusBadge(order.status)}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-xs text-emerald-400">
-                      {Number(order.total_amount || order.price || 0).toFixed(2)} €
+                      {Number(order.amount || order.total_amount || order.price || 0).toFixed(2)} €
                     </td>
                   </tr>
                 ))}
@@ -121,16 +135,26 @@ export default function MyPurchasesView({ userId, onBack }) {
         </div>
       )}
 
-      {/* Modale de suivi de commande interactive */}
+      {/* Modale de suivi de commande interactive (Séquestre & Validation) */}
       {isTrackingOpen && (
         <OrderTrackingModal 
           isOpen={isTrackingOpen}
           onClose={() => setIsTrackingOpen(false)}
-          currentStep={selectedOrder?.status} // <--- Utilise le statut réel de Supabase !
+          currentStep={selectedOrder?.status}
           sellerName="Vendeur"
           sellerId={selectedOrder?.seller_id}
           orderId={selectedOrder?.id}
-          onUpdate={fetchPurchases} // <--- Recharge le tableau automatiquement après une action
+          onUpdate={fetchPurchases}
+        />
+      )}
+
+      {/* Modale de signalement (si besoin d'être appelée depuis l'interface) */}
+      {isReportOpen && (
+        <ReportModal 
+          isOpen={isReportOpen}
+          onClose={() => setIsReportOpen(false)}
+          targetId={selectedOrder?.id}
+          targetType="order"
         />
       )}
     </div>

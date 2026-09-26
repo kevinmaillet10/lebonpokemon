@@ -20,6 +20,7 @@
     "framer-motion": "^13.1.1",
     "lucide-react": "^1.27.0",
     "node-fetch": "^3.3.2",
+    "pokemontcgsdk": "^2.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tesseract.js": "^7.0.0"

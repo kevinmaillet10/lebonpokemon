@@ -1,167 +1,178 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
+import OrderTrackingModal from './OrderTrackingModal';
+import ReportModal from './ReportModal'; // Import de ta modale de signalement
 
-export default function ReportModal({ targetId, targetType, onClose }) {
-  const [reason, setReason] = useState('Contrefaçon / Fausse carte');
-  const [details, setDetails] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+export default function MyPurchasesView({ userId, onBack }) {
+  const [purchases, setPurchases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  
+  // États pour gérer l'ouverture de la modale de suivi et du signalement
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isTrackingOpen, setIsTrackingOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
-  // Gestion de la sélection des fichiers (limité à 10 max)
-  const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 10) {
-      alert("Vous pouvez sélectionner un maximum de 10 photos.");
-      return;
+  useEffect(() => {
+    if (userId) {
+      fetchPurchases();
+    } else {
+      setLoading(false);
+      setErrorMessage("Utilisateur non connecté ou ID manquant.");
     }
-    setSelectedFiles(files);
-  };
+  }, [userId]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
+  async function fetchPurchases() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const imageUrls = [];
+      setLoading(true);
+      setErrorMessage('');
 
-      // 1. Upload des photos sur le stockage Supabase
-      for (const file of selectedFiles) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `${targetId}/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('reports') // Nom de ton bucket Supabase pour les pièces jointes
-          .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
-        // Récupération de l'URL publique de l'image uploadée
-        const { data: publicUrlData } = supabase.storage
-          .from('reports')
-          .getPublicUrl(filePath);
-
-        if (publicUrlData?.publicUrl) {
-          imageUrls.push(publicUrlData.publicUrl);
-        }
-      }
-
-      // 2. Enregistrement du signalement avec les URLs des photos
-      const { error } = await supabase.from('reports').insert({
-        reporter_id: user ? user.id : null,
-        target_id: targetId,
-        target_type: targetType,
-        reason: `${reason}: ${details}`,
-        images: imageUrls // Stocke le tableau des liens des photos
-      });
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('buyer_id', userId)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-
-      setSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, 2000);
+      setPurchases(data || []);
     } catch (err) {
-      console.error("Erreur lors de l'envoi du signalement :", err);
-      alert("Erreur lors de l'envoi des photos ou du signalement.");
+      console.error("Erreur lors de la récupération des achats :", err);
+      setErrorMessage("Impossible de charger vos achats pour le moment.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  const handleOpenTracking = (order) => {
+    setSelectedOrder(order);
+    setIsTrackingOpen(true);
+  };
+
+  // Traduction propre des statuts pour l'affichage
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'paid_escrow':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">🔒 Fonds bloqués (Séquestre)</span>;
+      case 'shipped':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">📦 Colis expédié</span>;
+      case 'completed':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✅ Terminé</span>;
+      case 'disputed':
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">⚠️ Litige</span>;
+      default:
+        return <span className="px-2.5 py-1 rounded-full font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">Confirmée</span>;
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center">
-          <h3 className="font-black text-slate-800 text-base">Signaler un problème 🚨</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer">✕</button>
+    <div className="space-y-6 text-white min-h-screen bg-[#111A29] p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+        <button
+          type="button"
+          onClick={onBack}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition-colors cursor-pointer border border-slate-700"
+        >
+          ← Retour
+        </button>
+        <div className="text-right">
+          <h2 className="text-xl font-bold text-white">Mes Achats</h2>
+          <p className="text-xs text-slate-400">Historique et suivi de vos commandes</p>
         </div>
-
-        {success ? (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-2xl text-xs font-bold text-center">
-            Signalement pris en compte. Notre équipe va examiner votre réclamation !
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Motif du problème</label>
-              <select 
-                value={reason} 
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 cursor-pointer"
-              >
-                <optgroup label="Annonce / Vendeur">
-                  <option value="Contrefaçon / Fausse carte">Contrefaçon / Fausse carte</option>
-                  <option value="Prix trompeur ou abusif">Prix trompeur ou abusif</option>
-                  <option value="Photos ou description non conformes">Photos ou description non conformes</option>
-                  <option value="Vendeur suspect / Comportement frauduleux">Vendeur suspect / Comportement frauduleux</option>
-                  <option value="Article déjà vendu / Annonce doublon">Article déjà vendu / Annonce doublon</option>
-                </optgroup>
-
-                <optgroup label="Commande / Livraison">
-                  <option value="Colis non reçu / Perdu">Colis non reçu / Perdu</option>
-                  <option value="Cartes endommagées ou abîmées">Cartes endommagées ou abîmées</option>
-                  <option value="Contenu non conforme / Articles manquants">Contenu non conforme / Articles manquants</option>
-                  <option value="Autre problème avec la commande">Autre problème avec la commande</option>
-                </optgroup>
-
-                <optgroup label="Autre">
-                  <option value="Autre motif">Autre motif</option>
-                </optgroup>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Détails (optionnel)</label>
-              <textarea 
-                rows="3"
-                value={details}
-                onChange={(e) => setDetails(e.target.value)}
-                placeholder="Explique brièvement le problème rencontré..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-800"
-              />
-            </div>
-
-            {/* Input direct pour choisir des fichiers du PC (jusqu'à 10 photos) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Photos justificatives (10 max)
-              </label>
-              <input 
-                type="file" 
-                accept="image/*"
-                multiple
-                onChange={handleFileChange}
-                className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
-              />
-              {selectedFiles.length > 0 && (
-                <p className="text-[11px] text-emerald-600 mt-1 font-medium">
-                  {selectedFiles.length} photo(s) sélectionnée(s)
-                </p>
-              )}
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button 
-                type="button" 
-                onClick={onClose}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-xs transition cursor-pointer"
-              >
-                Annuler
-              </button>
-              <button 
-                type="submit" 
-                disabled={loading}
-                className="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-bold py-2.5 rounded-xl text-xs shadow-sm transition cursor-pointer"
-              >
-                {loading ? "Envoi en cours..." : "Envoyer le signalement"}
-              </button>
-            </div>
-          </form>
-        )}
       </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-slate-400 text-xs">Chargement de vos achats...</div>
+      ) : errorMessage ? (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl text-center">
+          {errorMessage}
+        </div>
+      ) : purchases.length === 0 ? (
+        <div className="text-center py-16 bg-[#1A2331] rounded-2xl border border-slate-800 p-6 text-slate-400 space-y-2">
+          <p className="text-sm font-medium text-slate-300">Vous n'avez pas encore effectué d'achats.</p>
+          <p className="text-xs text-slate-500">Explorez les annonces pour trouver de nouvelles cartes !</p>
+        </div>
+      ) : (
+        <div className="bg-[#1A2331] rounded-2xl shadow-xl border border-slate-800 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-[#151c28] border-b border-slate-800 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
+                  <th className="py-3 px-4">Commande</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Statut</th>
+                  <th className="py-3 px-4 text-right">Total / Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-sm">
+                {purchases.map((order) => (
+                  <tr 
+                    key={order.id} 
+                    onClick={() => handleOpenTracking(order)}
+                    className="hover:bg-[#202a3c] transition-colors cursor-pointer"
+                    title="Cliquez pour voir le suivi de la commande"
+                  >
+                    <td className="py-3 px-4 font-semibold text-slate-200 text-xs">
+                      #{order.id.slice(0, 8)}
+                    </td>
+                    <td className="py-3 px-4 text-xs text-slate-400">
+                      {new Date(order.created_at).toLocaleDateString('fr-FR', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </td>
+                    <td className="py-3 px-4 text-xs">
+                      {getStatusBadge(order.status)}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <span className="font-bold text-xs text-emerald-400">
+                          {Number(order.amount || order.total_amount || order.price || 0).toFixed(2)} €
+                        </span>
+                        {/* Bouton pour ouvrir le ReportModal sur cette commande précise */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Évite d'ouvrir la modale de suivi par la même occasion
+                            setSelectedOrder(order);
+                            setIsReportOpen(true);
+                          }}
+                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-semibold rounded-lg border border-slate-700 transition cursor-pointer"
+                          title="Signaler un problème sur cette commande"
+                        >
+                          ⚠️ Signaler
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de suivi de commande interactive */}
+      {isTrackingOpen && (
+        <OrderTrackingModal 
+          isOpen={isTrackingOpen}
+          onClose={() => setIsTrackingOpen(false)}
+          currentStep={selectedOrder?.status}
+          sellerName="Vendeur"
+          sellerId={selectedOrder?.seller_id}
+          orderId={selectedOrder?.id}
+          onUpdate={fetchPurchases}
+        />
+      )}
+
+      {/* Modale de signalement connectée à la commande sélectionnée */}
+      {isReportOpen && selectedOrder && (
+        <ReportModal 
+          targetId={selectedOrder.id}
+          targetType="order"
+          onClose={() => setIsReportOpen(false)}
+        />
+      )}
     </div>
   );
 }

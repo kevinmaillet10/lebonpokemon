@@ -2,16 +2,22 @@ import React, { useState, useRef, useEffect } from 'react';
 
 export default function PokemonMusicPlayer({ playlist = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true); // 👈 Mis à true par défaut
   const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef(null);
 
   const currentTrack = playlist[currentIndex] || { title: "Aucune musique", url: "" };
 
-  // Volume par défaut à 30% pour ne pas agresser les oreilles au chargement
+  // Volume par défaut à 30% et tentative de lecture automatique au montage
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = 0.3;
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(error => {
+        console.log("Lecture automatique bloquée par le navigateur :", error);
+        setIsPlaying(false); // Passe à false si le navigateur bloque l'autoplay
+      });
     }
   }, []);
 
@@ -46,7 +52,7 @@ export default function PokemonMusicPlayer({ playlist = [] }) {
     setIsPlaying(true);
   };
 
-  // Lancer automatiquement la lecture si on change de piste et que c'était déjà en train de jouer
+  // Lancer automatiquement la lecture si on change de piste
   useEffect(() => {
     if (isPlaying && audioRef.current) {
       audioRef.current.play().catch(e => console.log("Erreur lecture audio:", e));
@@ -59,6 +65,7 @@ export default function PokemonMusicPlayer({ playlist = [] }) {
         ref={audioRef} 
         src={currentTrack.url} 
         onEnded={nextTrack} 
+        autoPlay
       />
       
       {/* Icône / Miniature style Pokéball */}

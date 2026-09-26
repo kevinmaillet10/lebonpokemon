@@ -145,7 +145,9 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
       const matchingCards = allCardsList.filter(card => {
         if (!card.name) return false;
         const cardNameNorm = card.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        return cardNameNorm.includes(pokeNameNorm);
+        // Sépare les mots de la carte pour s'assurer qu'on cherche bien le Pokémon (ex: "Bulbizarre" au début ou en tant que mot)
+        const cardWords = cardNameNorm.split(/[\s\-—]+/);
+        return cardWords.includes(pokeNameNorm) || cardNameNorm.startsWith(pokeNameNorm + " ");
       });
 
       const total = matchingCards.length;
@@ -172,7 +174,8 @@ export default function PokedexView({ user, onBack, onNavigateToShop }) {
     const matchingCards = allCardsList.filter(card => {
       if (!card.name) return false;
       const cardNameNorm = card.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      return cardNameNorm.includes(pokeNameNorm);
+      const cardWords = cardNameNorm.split(/[\s\-—]+/);
+      return cardWords.includes(pokeNameNorm) || cardNameNorm.startsWith(pokeNameNorm + " ");
     });
 
     // Tri par date de sortie décroissante

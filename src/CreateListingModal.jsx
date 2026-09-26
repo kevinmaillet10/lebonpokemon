@@ -518,7 +518,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                       setSelectedBlock(e.target.value);
                       setSelectedSeriesId(''); 
                     }}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    className="w-full bg-slate-900 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     <option value="">Sélectionner un bloc...</option>
                     {blocks.map((b) => (
@@ -535,7 +535,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                     value={selectedSeriesId}
                     onChange={(e) => setSelectedSeriesId(e.target.value)}
                     disabled={!selectedBlock}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50"
+                    className="w-full bg-slate-900 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:opacity-50"
                   >
                     <option value="">Sélectionner une série...</option>
                     {seriesList.map((s) => (
@@ -557,7 +557,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Ex: Dracaufeu 1er édition..."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             )}
@@ -572,7 +572,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   placeholder="0.00"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="bg-slate-900 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 {selectedCard && (selectedCard.trend || selectedCard.avg || selectedCard.trend_holo || selectedCard.avg_holo) && (
                   <p className="text-[11px] text-slate-500 mt-1">
@@ -593,7 +593,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                   required
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="bg-slate-900 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
             </div>
@@ -603,7 +603,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
               <select
                 value={condition}
                 onChange={(e) => setCondition(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                className="bg-slate-900 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
               >
                 <option value="MINT">Mint</option>
                 <option value="NM">Near Mint</option>
@@ -619,7 +619,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
               <select
                 value={finish}
                 onChange={(e) => setFinish(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-semibold text-indigo-600"
+                className="w-full bg-slate-900 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer font-semibold text-indigo-600"
               >
                 {selectedCard ? (
                   getCardVariantsList(selectedCard).map((variant) => {
@@ -689,7 +689,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                   setSelectedBlock(e.target.value);
                   setSelectedSeriesId('');
                 }}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
               >
                 <option value="">-- Sélectionnez un bloc --</option>
                 {blocks.map((b) => (
@@ -704,7 +704,7 @@ export default function CreateListingModal({ isOpen, onClose, onCreated, userId,
                 <select
                   value={selectedSeriesId}
                   onChange={(e) => setSelectedSeriesId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
                   <option value="">-- Sélectionnez une série --</option>
                   {seriesList.map((s) => (

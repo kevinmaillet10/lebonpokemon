@@ -378,7 +378,7 @@ const handleOpenListing = async (listingId) => {
     setCurrentView('checkout'); // 2. Bascule vers la vue Checkout.jsx
   };
 
-  const handleCheckout = async (sellerId, sellerGroup, shipping, finalTotal) => {
+  const handleCheckout = async (sellerId, sellerGroup, shipping, finalTotal, buyerProtectionParam) => {
     try {
 
       // 1. Vérifier si on provient d'un échange validé
@@ -388,13 +388,21 @@ const handleOpenListing = async (listingId) => {
       const shippingMethodName = shipping?.name || 'Lettre Suivante';
       const shippingCost = shipping?.price !== undefined ? Number(shipping.price) : 2.50;
 
+      const isMondial = shippingMethodName.toLowerCase().includes('mondial');
+      const currentRelay = shipping?.pointRelais || shippingMethods?.[sellerId]?.pointRelais;
+
+      if (isMondial && (!currentRelay || !currentRelay.name)) {
+        alert("⚠️ Veuillez sélectionner un point de retrait Mondial Relay avant de continuer.");
+        return; // Bloque l'exécution
+      }
+
       // 2. Si c'est un échange, le prix de l'article est de 0 €. Sinon, on calcule normalement.
       const itemPrice = isTrade ? 0 : sellerGroup.items.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
       
       // La commission de 5% s'appliquera sur 0 € (donc 0 € aussi pour l'échange)
-      const buyerProtection = Math.max(0.80, 0.70 + (finalItemPrice * 0.05));
+      const buyerProtection = Math.max(0.80, 0.70 + (itemPrice * 0.05));
 
-      // 1. Insertion de la commande principale
+      // 1. Insertion de la commande principale (en statut 'pending')
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -404,7 +412,7 @@ const handleOpenListing = async (listingId) => {
           shipping_cost: shippingCost,
           item_price: itemPrice,
           shipping_fee: shippingCost,
-          platform_fee: platformFee,
+          platform_fee: buyerProtection,
           total_amount: finalTotal,
           status: 'pending'
         })
@@ -443,7 +451,7 @@ const handleOpenListing = async (listingId) => {
         if (rpcError) throw rpcError;
       }
 
-      // 4. Message automatique
+      // 4. Message automatique (optionnel, tu peux le garder)
       const firstItem = sellerGroup.items[0];
       const listingId = firstItem?.id;
       const cardNamesList = sellerGroup.items.map(item => item.cards?.name || 'Carte').join(', ');
@@ -478,33 +486,62 @@ const handleOpenListing = async (listingId) => {
           await supabase.from('messages').insert({
             conversation_id: conversationId,
             sender_id: user.id,
-            content: `[Achat validé] Commande passée pour un montant de ${finalTotal} € (Articles : ${cardNamesList}).`,
+            content: `[Achat en cours] Commande initiée pour un montant de ${finalTotal} € (Articles : ${cardNamesList}). En attente de paiement.`,
             is_read: false
           });
         }
       }
 
-      // Nettoyer le localStorage de l'échange une fois la commande passée
+      // Nettoyer le localStorage de l'échange
       localStorage.removeItem('pendingCheckout');
 
-      // Succès
-      alert("Commande validée avec succès !");
-      
-      // Nettoyage propre du panier pour ce vendeur uniquement
+      // Nettoyage du panier pour ce vendeur
       setCart(prevCart => {
         const newCart = { ...prevCart };
         delete newCart[sellerId];
         return newCart;
       });
 
-      // 🌟 AJOUTE CETTE LIGNE : Rafraîchit la liste des annonces pour faire disparaître l'article vendu
-      if (typeof fetchListings === 'function') {
-        fetchListings();
+      // 🌟 5. PRÉPARATION ET REDIRECTION VERS STRIPE
+      const itemsSummary = sellerGroup.items.map(item => ({
+        name: item.cards?.name || item.title || 'Carte Pokémon',
+        price: item.price || 0,
+        quantity: item.quantity || 1,
+      }));
+
+      if (shippingCost > 0) {
+        itemsSummary.push({
+          name: `Frais de port (${shippingMethodName})`,
+          price: shippingCost,
+          quantity: 1,
+        });
+      }
+
+      // Appel de la Supabase Edge Function pour générer la session Stripe
+      const { data: stripeData, error: stripeError } = await supabase.functions.invoke('create-checkout-session', {
+        body: { 
+          items: itemsSummary, 
+          sellerId: sellerId, 
+          orderId: orderData.id, // On transmet l'ID de la commande créée en base
+          total: finalTotal,
+          shippingFee: shippingCost,
+          shippingMethod: shippingMethodName,
+          buyerId: user.id
+        }
+      });
+
+      if (stripeError) throw stripeError;
+
+      if (stripeData?.url) {
+        // Redirection effective vers la page de paiement sécurisée Stripe
+        window.location.href = stripeData.url;
+      } else {
+        throw new Error("Aucune URL de redirection Stripe reçue.");
       }
 
     } catch (err) {
       console.error("Erreur détaillée lors du checkout :", err);
-      alert("Erreur Supabase : " + (err.message || "Une erreur est survenue lors de la validation."));
+      alert("Erreur : " + (err.message || "Une erreur est survenue lors de la validation."));
     }
   };
 
@@ -678,8 +715,13 @@ const handleOpenListing = async (listingId) => {
   };
 
   const totalCartItemsCount = useMemo(() => {
+    if (!cart) return 0;
+    if (Array.isArray(cart)) {
+      return cart.reduce((total, item) => total + (Number(item?.quantity) || 1), 0);
+    }
     return Object.values(cart).reduce((total, sellerGroup) => {
-      return total + sellerGroup.items.reduce((subTotal, item) => subTotal + (item.quantity || 1), 0);
+      const items = sellerGroup?.items || [];
+      return total + items.reduce((subTotal, item) => subTotal + (Number(item?.quantity) || 1), 0);
     }, 0);
   }, [cart]);
 
@@ -1014,18 +1056,12 @@ const handleOpenListing = async (listingId) => {
   }, [user, listings]);
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-800 relative bg-slate-900 pt-8 md:pt-0" onClick={() => isUserMenuOpen && setIsUserMenuOpen(false)}>
-      
+  <div className="min-h-screen font-sans relative pt-8 md:pt-0 transition-colors duration-500 bg-slate-900 text-white" onClick={() => isUserMenuOpen && setIsUserMenuOpen(false)}>
+
       {/* 1. L'animation de bienvenue se place en tout premier par-dessus tout */}
       {showSplash && (
         <WelcomeSplash onFinish={handleSplashFinish} />
       )}
-
-      {/* Bandeau Mode Bêta Global */}
-      <div className="bg-amber-500 text-slate-950 px-4 py-2 text-center font-bold text-sm shadow-md flex items-center justify-center gap-2">
-        <span>🚧</span>
-        <span>Mode Bêta / Simulation : Aucun paiement réel. Les annonces et les envois sont fictifs. Amusez-vous à tester !</span>
-      </div>
 
       {/* HEADER */}
       {Capacitor.isNativePlatform() ? (
@@ -1392,7 +1428,7 @@ const handleOpenListing = async (listingId) => {
             </button>
 
             <button
-              onClick={() => setCurrentView('Pokedex')}
+              onClick={() => setCurrentView('pokedex')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer whitespace-nowrap ${
                 currentView?.toLowerCase() === 'pokedex'
                   ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/30'
@@ -1593,18 +1629,7 @@ const handleOpenListing = async (listingId) => {
       <div className="relative bg-slate-900 max-w-[1920px] mx-auto flex justify-between px-4 flex-grow">
         {currentView === 'cart' && (
             <div className="max-w-4xl mx-auto space-y-6">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                  <span>🛒</span> Mon Panier multi-vendeurs
-                </h2>
-                <button
-                  onClick={() => setCurrentView('home')}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                >
-                  ← Continuer mes achats
-                </button>
-              </div>
-
+              
               {Object.keys(cart).length === 0 ? (
                 <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm">
                   <p className="text-4xl mb-3">🛒</p>
@@ -1662,9 +1687,12 @@ const handleOpenListing = async (listingId) => {
               </div>
             ) : (
               <div className="space-y-6">
-               {Object.entries(cart).map(([sellerId, sellerGroup]) => {
+               {Object.entries(cart || {}).map(([sellerId, sellerGroup]) => {
+
+                const items = sellerGroup?.items || [];
                 // Calcule le sous-total des articles du vendeur
-                const subTotal = sellerGroup.items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0);
+                const subTotal = items.reduce((sum, item) => sum + (Number(item?.price) || 0) * (Number(item?.quantity) || 1), 0);
+                if (items.length === 0) return null;
   
                 // Définit proprement le mode de livraison actuel pour ce vendeur (avec valeurs par défaut)
                 const currentShipping = shippingMethods[sellerId] || { name: 'Lettre Suivante', price: 2.50 };
@@ -1686,12 +1714,12 @@ const handleOpenListing = async (listingId) => {
                           <h3 className="text-sm font-black text-slate-900">📦 Colis de : {sellerGroup.sellerName}</h3>
                         </div>
                         <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-100">
-                          {sellerGroup.items.reduce((acc, item) => acc + (item.quantity || 1), 0)} article(s)
+                          {items.reduce((acc, item) => acc + (item.quantity || 1), 0)} article(s)
                         </span>
                       </div>
 
                       <div className="divide-y divide-slate-100">
-                        {sellerGroup.items.map((item) => {
+                        {items.map((item, index) =>{
                           const maxStock = item.maxStock || item.stock || item.quantity || 1;
                           const currentQty = item.quantity || 1;
 
@@ -1914,11 +1942,27 @@ const handleOpenListing = async (listingId) => {
                     </div>
 
                     <div className="px-6 py-4 bg-white border-t border-slate-100 flex justify-end">
-                      <button
-                        onClick={() => handleCheckout(sellerId, sellerGroup, currentShipping, finalTotal)}
-                        className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2"       >
-                        <span>💳</span> Valider cet achat ({finalTotal.toFixed(2)} €)
-                      </button>
+                      {(() => {
+                        const shippingStr = typeof currentShipping === 'string' ? currentShipping : (currentShipping?.name || '');
+                        const isMondial = shippingStr.toLowerCase().includes('mondial') || shippingStr === 'mondial';
+                        const currentRelay = currentShipping?.pointRelais || shippingMethods?.[sellerId]?.pointRelais;
+                        const isMondialMissing = isMondial && (!currentRelay || !currentRelay.name);
+
+                        return (
+                          <button
+                            disabled={isMondialMissing}
+                            onClick={() => handleCheckout(sellerId, sellerGroup, currentShipping, finalTotal)}
+                            className={`w-full sm:w-auto text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-colors shadow-md flex items-center justify-center space-x-2 ${
+                              isMondialMissing 
+                                ? 'bg-slate-400 cursor-not-allowed opacity-70' 
+                                : 'bg-slate-900 hover:bg-slate-800 cursor-pointer'
+                            }`}
+                          >
+                            <span>💳</span>
+                            <span>{isMondialMissing ? "⚠️ Choisir un Point Relais" : `Valider cet achat (${finalTotal.toFixed(2)} €)`}</span>
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -2056,7 +2100,7 @@ const handleOpenListing = async (listingId) => {
                     value={profile.username|| ''}
                     onChange={(e) => setProfile({...profile, username: e.target.value})}
                     placeholder="Votre pseudo"
-                    className="max-w-xs w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    className="max-w-xs w-full bg-slate-900 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -2080,7 +2124,7 @@ const handleOpenListing = async (listingId) => {
                   <select 
                     value={profile.country}
                     onChange={(e) => setProfile({...profile, country: e.target.value})}
-                    className="text-sm text- bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
+                    className="text-sm text- bg-slate-900 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
                   >
                     <option value="France">France</option>
                     <option value="Belgique">Belgique</option>
@@ -2097,14 +2141,14 @@ const handleOpenListing = async (listingId) => {
                       value={profile.department_code}
                       onChange={(e) => setProfile({...profile, department_code: e.target.value})}
                       placeholder="Dép. (ex: 18)"
-                      className="w-28 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-center"
+                      className="w-28 bg-slate-900 border border-slate-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-center"
                     />
                     <input 
                       type="text"
                       value={profile.city}
                       onChange={(e) => setProfile({...profile, city: e.target.value})}
                       placeholder="Ville"
-                      className="w-44 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      className="w-44 bg-slate-900 border border-slate-300 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
                 </div>
@@ -2129,7 +2173,7 @@ const handleOpenListing = async (listingId) => {
                   <select 
                     value={profile.language}
                     onChange={(e) => setProfile({...profile, language: e.target.value})}
-                    className="text-sm text-gray-700 bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
+                    className="text-sm text-white bg-slate-900 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
                   >
                     <option value="Français (French)">Français (French)</option>
                     <option value="English">English</option>
@@ -2147,7 +2191,7 @@ const handleOpenListing = async (listingId) => {
                           type="text"
                           value={profile.first_name || ''}
                           onChange={(e) => setProfile({...profile, first_name: e.target.value})}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                         />
                       </div>
                       <div>
@@ -2156,7 +2200,7 @@ const handleOpenListing = async (listingId) => {
                           type="text"
                           value={profile.last_name || ''}
                           onChange={(e) => setProfile({...profile, last_name: e.target.value})}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                         />
                       </div>
                     <div>
@@ -2166,7 +2210,7 @@ const handleOpenListing = async (listingId) => {
                         value={profile.phone || ''}
                         onChange={(e) => setProfile({...profile, phone: e.target.value})}
                         placeholder="Ex: 0612345678"
-                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -2176,7 +2220,7 @@ const handleOpenListing = async (listingId) => {
                         value={profile.address || ''}
                         onChange={(e) => setProfile({...profile, address: e.target.value})}
                         placeholder="Numéro et nom de rue"
-                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -2186,7 +2230,7 @@ const handleOpenListing = async (listingId) => {
                         value={profile.postal_code || ''}
                         onChange={(e) => setProfile({...profile, postal_code: e.target.value})}
                         placeholder="Ex: 18700"
-                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
                     </div>
 
@@ -2197,7 +2241,7 @@ const handleOpenListing = async (listingId) => {
                         value={profile.city || ''}
                         onChange={(e) => setProfile({...profile, city: e.target.value})}
                         placeholder="Ex: Bourges"
-                        className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full bg-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
                     </div>
                   </div>
@@ -2217,7 +2261,7 @@ const handleOpenListing = async (listingId) => {
             </form>
 
             <div className="pt-6">
-              <h3 className="text-lg font-bold text-white mb-4">Mes annonces en ligne ({userListings.length})</h3>
+              <h3 className="text-xl font-bold text-center text-white mb-4">Mes annonces en ligne ({userListings.length})</h3>
               {userListings.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                   <p className="text-slate-600 font-medium">Vous n'avez publié aucune annonce.</p>

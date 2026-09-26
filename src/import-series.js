@@ -6,20 +6,21 @@ const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const tcgdex = new TCGdex();
-tcgdex.setLang('fr');
+// Initialisation directe de la langue française dans le constructeur
+const tcgdex = new TCGdex('fr');
 
 async function importSeriesAndCards() {
   console.log("🔄 Récupération de la liste des séries depuis TCGdex...");
-  const sets = await tcgdex.sets.list({ lang: 'fr' });
+  
+  // ⚠️ Utilisation du singulier 'set'
+  const sets = await tcgdex.set.list();
 
   if (!sets) {
     console.error("❌ Impossible de récupérer les séries.");
     return;
   }
 
-  // OPTIMISATION CRITIQUE : On récupère la liste de tous les set_id déjà en base en UNE seule requête
-  // pour éviter de saturer Supabase avec des centaines de requêtes individuelles.
+  // OPTIMISATION : On récupère la liste de tous les set_id déjà en base en UNE seule requête
   console.log("🔍 Vérification des séries déjà présentes dans Supabase...");
   const { data: existingCards, error: dbError } = await supabase
     .from('cards')
@@ -30,7 +31,6 @@ async function importSeriesAndCards() {
     return;
   }
 
-  // On crée un Set JavaScript contenant les IDs des séries déjà enregistrées pour une recherche instantanée
   const importedSetIds = new Set(existingCards.map(card => card.set_id));
   console.log(`📊 ${importedSetIds.size} séries trouvées en base comme déjà importées.\n`);
 
@@ -41,7 +41,7 @@ async function importSeriesAndCards() {
       continue;
     }
 
-    // Si la série est déjà connue en base, on la saute immédiatement sans appeler l'API TCGdex
+    // Si la série est déjà connue en base, on la saute immédiatement
     if (importedSetIds.has(setBrief.id)) {
       console.log(`⏩ Série déjà importée : ${setBrief.name} (${setBrief.id}) - Ignorée.`);
       continue;
@@ -49,7 +49,8 @@ async function importSeriesAndCards() {
 
     console.log(`\n📥 Traitement de la série : ${setBrief.name} (${setBrief.id})...`);
     
-    const set = await tcgdex.sets.get(setBrief.id, { lang: 'fr' });
+    // ⚠️ Utilisation du singulier 'set'
+    const set = await tcgdex.set.get(setBrief.id);
     if (!set) continue;
 
     // 1. Insertion de la série
@@ -74,7 +75,8 @@ async function importSeriesAndCards() {
     // 2. Traitement des cartes de la série
     if (set.cards) {
       for (const cardBrief of set.cards) {
-        const card = await tcgdex.cards.get(cardBrief.id, { lang: 'fr' });
+        // ⚠️ Utilisation du singulier 'card'
+        const card = await tcgdex.card.get(cardBrief.id);
         
         if (card && card.name) {
           const cardPayload = {

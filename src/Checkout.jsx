@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import MondialRelayModal from './MondialRelayModal';
+import { loadStripe } from '@stripe/stripe-js';
 
 export default function Checkout({ listingId, itemPrice = 0, sellerId, onSuccessfulCheckout }) {
   const [loading, setLoading] = useState(false);
@@ -16,25 +17,19 @@ export default function Checkout({ listingId, itemPrice = 0, sellerId, onSuccess
     }
   });
 
-  // 2. Détection du mode échange
-  const isTrade = pendingData.isTrade === true;
-
-  // 3. Extraction du prix/valeur (prend en compte itemPrice, value, cardsTotal ou price transmis par le chat/panier)
-  const finalItemPrice = Number(
-    itemPrice > 0 
-      ? itemPrice 
-      : (pendingData.itemPrice ?? pendingData.value ?? pendingData.cardPrice ?? pendingData.cardsTotal ?? pendingData.price ?? 0)
-  );
-
-  // 4. Écouter l'événement global pour rafraîchir le panier en direct
+  // Synchronisation des événements de stockage et de l'événement personnalisé open-checkout
   useEffect(() => {
-    const handleStorageUpdate = () => {
+    const handleStorageUpdate = (e) => {
       try {
+        if (e?.detail) {
+          setPendingData(e.detail);
+          return;
+        }
         const saved = localStorage.getItem('pendingCheckout');
         if (saved) {
           setPendingData(JSON.parse(saved));
         }
-      } catch (e) {}
+      } catch (err) {}
     };
 
     window.addEventListener('open-checkout', handleStorageUpdate);
@@ -45,18 +40,57 @@ export default function Checkout({ listingId, itemPrice = 0, sellerId, onSuccess
     };
   }, []);
 
+  const isTrade = pendingData.isTrade === true;
+
+  const finalItemPrice = Number(
+    itemPrice > 0 
+      ? itemPrice 
+      : (pendingData.itemPrice ?? pendingData.value ?? pendingData.cardPrice ?? pendingData.cardsTotal ?? pendingData.price ?? 0)
+  );
+
   const finalSellerId = pendingData?.sellerId || sellerId;
   const finalListingId = pendingData?.listingId || listingId;
+  
+  // Récupération de la taille du colis depuis pendingData (ou valeur par défaut 'small')
+  const parcelSize = pendingData?.parcel_size || pendingData?.parcelSize || 'small';
 
   const [deliveryMode, setDeliveryMode] = useState('mondial'); 
-  const [selectedRelay, setSelectedRelay] = useState(pendingData?.pointRelais || null);
+  
+  // Initialisation du point relais
+  const [selectedRelay, setSelectedRelay] = useState(() => {
+    const relay = pendingData?.pointRelais;
+    if (relay && (relay.id || relay.Id || relay.Num || relay.code || relay.Code || relay.name || relay.Nom || relay.nom)) {
+      return relay;
+    }
+    return null;
+  });
+
+  // Synchronisation dynamique si pendingData change en arrière-plan
+  useEffect(() => {
+    const relay = pendingData?.pointRelais;
+    if (relay && (relay.id || relay.Id || relay.Num || relay.code || relay.Code || relay.name || relay.Nom || relay.nom)) {
+      setSelectedRelay(relay);
+    }
+  }, [pendingData]);
+
   const [isRelayModalOpen, setIsRelayModalOpen] = useState(false);
+
+  // Fonction de validation stricte pour le Point Relais
+  const isValidRelay = (relay) => {
+    if (!relay || typeof relay !== 'object') return false;
+    const relayId = relay.id || relay.Id || relay.Num || relay.code || relay.Code;
+    const relayName = relay.name || relay.Nom || relay.nom;
+    return Boolean(relayId || relayName);
+  };
+
+  const isMondialMissing = deliveryMode === 'mondial' && !isValidRelay(selectedRelay);
 
   const handleSelectRelayPoint = (id, relay) => {
     setSelectedRelay(relay);
     setIsRelayModalOpen(false);
     const updated = { ...pendingData, pointRelais: relay };
     localStorage.setItem('pendingCheckout', JSON.stringify(updated));
+    setPendingData(updated);
   };
   
   let parsedShippingFee = 2.99;
@@ -70,70 +104,68 @@ export default function Checkout({ listingId, itemPrice = 0, sellerId, onSuccess
     currentCarrier = "Remise en main propre";
   } else {
     parsedShippingFee = 2.99;
-    currentCarrier = selectedRelay ? `Mondial Relay (${selectedRelay.name || selectedRelay.Nom})` : "Mondial Relay";
+    const relayName = selectedRelay?.name || selectedRelay?.Nom || selectedRelay?.nom;
+    currentCarrier = relayName ? `Mondial Relay (${relayName})` : "Mondial Relay";
   }
 
-  // RÈGLE DE PROTECTION UNIVERSELLE : 
-  // 0 € uniquement si Remise en main propre. 
-  // Partout ailleurs (Achats, Offres, Échanges envoyés par la poste), c'est 10% avec un minimum de 0.80 €.
   const isHandDelivery = deliveryMode === 'hand' || parsedShippingFee === 0;
   const buyerProtection = isHandDelivery ? 0 : Math.max(0.80, finalItemPrice * 0.10);
   
   const totalAmount = Number((finalItemPrice + parsedShippingFee + buyerProtection).toFixed(2));
 
   const handleCheckoutSubmit = async () => {
-    try {
-      if (deliveryMode === 'mondial' && !selectedRelay) {
-        alert("Veuillez sélectionner un Point Relais Mondial Relay avant de confirmer.");
-        return;
-      }
+    if (deliveryMode === 'mondial' && !isValidRelay(selectedRelay)) {
+      alert("BLOQUÉ : Veuillez sélectionner un point de retrait Mondial Relay avant de continuer.");
+      setLoading(false);
+      return;
+    }
 
+    try {
       setLoading(true);
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("Vous devez être connecté pour valider.");
 
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([
-          {
-            buyer_id: user.id,
-            seller_id: finalSellerId,
-            item_price: finalItemPrice,
-            shipping_fee: parsedShippingFee,
-            shipping_method: currentCarrier,
-            platform_fee: buyerProtection, 
-            total_amount: totalAmount, 
-            status: 'pending'          
-          }
-        ])
-        .select();
-
-      if (error) throw error;
-
-      if (finalListingId) {
-        const { data: listingData, error: fetchError } = await supabase
-          .from('listings')
-          .select('quantity')
-          .eq('id', finalListingId)
-          .single();
-
-        if (!fetchError && listingData) {
-          const newQuantity = Math.max(0, (listingData.quantity || 1) - 1);
-          await supabase
-            .from('listings')
-            .update({ quantity: newQuantity })
-            .eq('id', finalListingId);
+      const cartItems = [
+        {
+          name: pendingData?.title || pendingData?.name || pendingData?.cardName || 'Carte Pokémon',
+          price: finalItemPrice,
+          quantity: 1
         }
+      ];
+
+      // Transmission de la taille du colis vers l'Edge Function (qui créera l'entrée dans 'orders')
+      const { data: sessionData, error: sessionError } = await supabase.functions.invoke('create-checkout-session', {
+        body: {
+          items: cartItems,
+          shippingFee: parsedShippingFee,
+          shippingMethod: currentCarrier,
+          buyerProtection: buyerProtection,
+          totalAmount,
+          sellerId: finalSellerId,
+          listingId: finalListingId,
+          buyerId: user.id,
+          pointRelais: selectedRelay,
+          parcelSize: parcelSize
+        }
+      });
+
+      if (sessionError) throw sessionError;
+      
+      if (sessionData?.url) {
+        window.location.href = sessionData.url;
+      } else if (sessionData?.sessionId) {
+        const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+        if (!stripeKey) throw new Error("Clé publique Stripe introuvable.");
+        const stripe = await loadStripe(stripeKey);
+        if (!stripe) throw new Error("Erreur d'initialisation de Stripe.");
+        await stripe.redirectToCheckout({ sessionId: sessionData.sessionId });
+      } else {
+        throw new Error("Impossible de créer la session de paiement Stripe.");
       }
 
-      localStorage.removeItem('pendingCheckout');
-      alert("🎉 Commande validée avec succès !");
-      if (onSuccessfulCheckout) onSuccessfulCheckout(data[0]);
-
     } catch (err) {
-      console.error("Erreur lors du checkout :", err.message);
+      console.error("Erreur lors du checkout Stripe :", err.message);
       alert("Erreur : " + err.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -146,7 +178,7 @@ export default function Checkout({ listingId, itemPrice = 0, sellerId, onSuccess
         {isTrade ? (
           <>🧪 **Validation d'échange :** Échange équitable enregistré. Choisissez votre option de livraison.</>
         ) : (
-          <>💳 **Validation de la commande :** Panier / Achat direct. Finalisez votre règlement.</>
+          <>💳 **Validation de la commande :** Panier / Achat direct. Finalisez votre règlement sécurisé par carte.</>
         )}
       </div>
 
@@ -160,17 +192,17 @@ export default function Checkout({ listingId, itemPrice = 0, sellerId, onSuccess
         <div className="bg-[#1A2331] border border-slate-800 rounded-xl p-4 space-y-2">
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-300">Point Relais sélectionné :</span>
-            <button type="button" onClick={() => setIsRelayModalOpen(true)} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold cursor-pointer">
-              {selectedRelay ? "Changer" : "Choisir un point relais"}
+            <button type="button" onClick={() => setIsRelayModalOpen(true)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors">
+              {isValidRelay(selectedRelay) ? "Changer" : "Choisir un point relais"}
             </button>
           </div>
-          {selectedRelay ? (
+          {isValidRelay(selectedRelay) ? (
             <div className="text-xs text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg">
-              <p className="font-bold">{selectedRelay.name || selectedRelay.Nom}</p>
-              <p className="text-slate-400">{selectedRelay.address || `${selectedRelay.Adresse1} - ${selectedRelay.CP} ${selectedRelay.Ville}`}</p>
+              <p className="font-bold">{selectedRelay.name || selectedRelay.Nom || selectedRelay.nom}</p>
+              <p className="text-slate-400">{selectedRelay.address || `${selectedRelay.Adresse1 || ''} - ${selectedRelay.CP || ''} ${selectedRelay.Ville || ''}`}</p>
             </div>
           ) : (
-            <p className="text-xs text-amber-400">⚠️ Aucun point relais sélectionné.</p>
+            <p className="text-xs text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg">⚠️ Aucun point relais sélectionné.</p>
           )}
         </div>
       )}
@@ -199,8 +231,21 @@ export default function Checkout({ listingId, itemPrice = 0, sellerId, onSuccess
         </div>
       </div>
 
-      <button onClick={handleCheckoutSubmit} disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl cursor-pointer transition-colors shadow-md disabled:opacity-50 text-xs uppercase tracking-wider">
-        {loading ? "Traitement en cours..." : `Confirmer et régler (${totalAmount.toFixed(2)} €)`}
+      <button 
+        onClick={handleCheckoutSubmit} 
+        disabled={loading || isMondialMissing} 
+        className={`w-full font-bold py-3.5 rounded-xl transition-all shadow-md text-xs uppercase tracking-wider ${
+          isMondialMissing 
+            ? 'bg-slate-800 border border-amber-500/30 text-amber-400 cursor-not-allowed opacity-80' 
+            : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+        }`}
+      >
+        {loading 
+          ? "Redirection vers Stripe..." 
+          : isMondialMissing 
+            ? "⚠️ Veuillez choisir un Point Relais" 
+            : `Payer par carte (${totalAmount.toFixed(2)} €)`
+        }
       </button>
 
       <MondialRelayModal isOpen={isRelayModalOpen} sellerId={finalSellerId} onClose={() => setIsRelayModalOpen(false)} onSelectPoint={handleSelectRelayPoint} />

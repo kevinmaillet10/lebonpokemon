@@ -1,5 +1,6 @@
 // src/stripeService.js
 import stripePromise from './stripeClient';
+import { supabase } from './supabase';
 
 export async function redirectToStripeCheckout(sellerGroup, currentShipping, finalTotal) {
   const stripe = await stripePromise;
@@ -17,45 +18,51 @@ export async function redirectToStripeCheckout(sellerGroup, currentShipping, fin
     return;
   }
 
-  // 2. Préparation optionnelle des métadonnées ou de la charge utile
-  const itemsSummary = sellerGroup.items.map(item => ({
+  // 2. Préparation des articles pour Stripe
+  const itemsSummary = sellerGroup?.items ? sellerGroup.items.map(item => ({
     name: item.cards?.name || item.title || 'Carte Pokémon',
-    price: Math.round((item.price || 0) * 100),
+    price: item.price || 0,
     quantity: item.quantity || 1,
-  }));
+  })) : [{
+    name: 'Article / Carte Pokémon',
+    price: sellerGroup?.itemPrice || safeTotal,
+    quantity: 1,
+  }];
 
   if (currentShipping && currentShipping.price > 0) {
     itemsSummary.push({
       name: `Frais de port (${currentShipping.name})`,
-      price: Math.round(currentShipping.price * 100),
+      price: currentShipping.price,
       quantity: 1,
     });
   }
 
   try {
-    console.log("Articles du panier :", itemsSummary);
-    console.log("Montant total validé :", safeTotal.toFixed(2), "€");
+    console.log("Articles envoyés à Stripe :", itemsSummary);
 
-    // NOTE : Si tu utilises une Edge Function Supabase pour créer une session Stripe Checkout :
-    /*
-    const { data, error } = await supabase.functions.functions.invoke('create-checkout-session', {
-      body: { items: itemsSummary, sellerId: sellerGroup.sellerId, total: safeTotal }
+    // 3. Appel de la fonction Supabase Edge Function
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { 
+        items: itemsSummary, 
+        sellerId: sellerGroup?.sellerId, 
+        listingId: sellerGroup?.listingId,
+        total: safeTotal,
+        shippingFee: currentShipping?.price || 0,
+        shippingMethod: currentShipping?.name || 'Standard'
+      }
     });
     
     if (error) throw error;
     
-    const result = await stripe.redirectToCheckout({ sessionId: data.sessionId });
-    if (result.error) {
-      alert(result.error.message);
+    if (data?.url) {
+      // Redirection vers la page de paiement sécurisée Stripe
+      window.location.href = data.url;
+    } else {
+      throw new Error("Aucune URL de redirection Stripe reçue.");
     }
-    */
-
-    // En attendant d'brancher l'appel serveur de session Stripe, 
-    // voici le comportement propre validé avec ton montant final :
-    alert(`Paiement de ${safeTotal.toFixed(2)} € validé avec succès !`);
 
   } catch (err) {
     console.error("Erreur lors de la redirection Stripe :", err);
-    alert("Une erreur est survenue lors de la communication avec le service de paiement.");
+    alert("Une erreur est survenue lors de la communication avec le service de paiement : " + err.message);
   }
 }
